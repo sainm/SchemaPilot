@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: schemapilot-postgres
+    environment:
+      POSTGRES_DB: schemapilot
+      POSTGRES_USER: schemapilot
+      POSTGRES_PASSWORD: schemapilot
+    ports:
+      - "5432:5432"
+    volumes:
+      - schemapilot-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  schemapilot-postgres-data:
+

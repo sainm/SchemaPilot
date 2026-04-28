@@ -1,0 +1,63 @@
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Java / Gradle
+.gradle/
+build/
+out/
+target/
+*.class
+*.jar
+*.war
+*.ear
+!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+application-local.yml
+application-local.yaml
+application-local.properties
+*.key
+*.pem
+*.p12
+
+# Runtime logs / generated temporary files
+*.log
+*.tmp
+*.temp
+*.pid
+*.zip
+*.tar
+*.tar.gz
+tmp-*.sql
+backend-*.log
+frontend-*.log
+vite.*.log
+
+# Database / migration local dumps
+*.dump
+*.backup
+*.bak
+
+# Test reports and caches
+.eslintcache
+.pytest_cache/
+.cache/
