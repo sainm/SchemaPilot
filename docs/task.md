@@ -320,26 +320,26 @@
 
 ## 18. P1：Oracle 直连扫描
 
-- [ ] `P1` 扫描 schema。
-- [ ] `P1` 扫描 table。
-- [ ] `P1` 扫描 column。
-- [ ] `P1` 扫描 primary key。
-- [ ] `P1` 扫描 foreign key。
-- [ ] `P1` 扫描 unique/check constraint。
-- [ ] `P1` 扫描 index。
-- [ ] `P1` 扫描 sequence。
-- [ ] `P1` 扫描 view。
-- [ ] `P1` 扫描 trigger。
-- [ ] `P1` 扫描 function。
-- [ ] `P1` 扫描 procedure。
-- [ ] `P1` 扫描 package。
-- [ ] `P1` 扫描 synonym。
-- [ ] `P1` 扫描 comment。
-- [ ] `P1` 扫描 partition metadata。
-- [ ] `P1` 使用 `DBMS_METADATA` 获取 DDL。
-- [ ] `P1` 使用源码视图获取 PL/SQL。
-- [ ] `P1` 扫描进度实时推送。
-- [ ] `P1` 权限不足时记录风险。
+- [x] `P1` 扫描 schema。
+- [x] `P1` 扫描 table。
+- [x] `P1` 扫描 column。
+- [x] `P1` 扫描 primary key。
+- [x] `P1` 扫描 foreign key。
+- [x] `P1` 扫描 unique/check constraint。
+- [x] `P1` 扫描 index。
+- [x] `P1` 扫描 sequence。
+- [x] `P1` 扫描 view。
+- [x] `P1` 扫描 trigger。
+- [x] `P1` 扫描 function。
+- [x] `P1` 扫描 procedure。
+- [x] `P1` 扫描 package。
+- [x] `P1` 扫描 synonym。
+- [x] `P1` 扫描 comment。
+- [x] `P1` 扫描 partition metadata。
+- [x] `P1` 使用 `DBMS_METADATA` 获取 DDL。
+- [x] `P1` 使用源码视图获取 PL/SQL。
+- [x] `P1` 扫描进度实时推送。
+- [x] `P1` 权限不足时记录风险。
 
 ## 19. P1：迁移计划和 DDL 执行
 
@@ -362,8 +362,8 @@
 
 ## 20. P1：基础数据迁移
 
-- [ ] `P1` 实现 Oracle streaming reader。
-- [ ] `P1` 实现 PostgreSQL COPY writer。
+- [x] `P1` 实现 Oracle streaming reader。
+- [x] `P1` 实现 PostgreSQL COPY writer。
 - [x] `P1` 定义 `MemoryBudgetManager`。
 - [x] `P1` 定义项目级堆外内存预算。
 - [x] `P1` 定义 task 级堆外内存预算。
@@ -372,30 +372,30 @@
 - [x] `P1` 实现 FFM buffer flush 策略。
 - [x] `P1` 实现 arena close 安全检查。
 - [x] `P1` 定义 NULL 和空字符串编码策略。
-- [ ] `P1` 支持小表全量迁移。
-- [ ] `P1` 记录迁移行数。
-- [ ] `P1` 记录 rows/s。
-- [ ] `P1` 实时推送进度。
+- [x] `P1` 支持小表全量迁移。
+- [x] `P1` 记录迁移行数。
+- [x] `P1` 记录 rows/s。
+- [x] `P1` 实时推送进度。
 - [x] `P1` 记录堆外内存使用量。
 - [x] `P1` 记录 arena 未关闭数量。
 - [x] `P1` 堆外内存超限时触发限流。
-- [ ] `P1` 捕获 COPY 错误。
-- [ ] `P1` 失败重试。
-- [ ] `P1` 数据迁移失败时生成待处理问题。
-- [ ] `P1` 行数校验失败时生成待处理问题。
+- [x] `P1` 捕获 COPY 错误。
+- [x] `P1` 失败重试。
+- [x] `P1` 数据迁移失败时生成待处理问题。
+- [x] `P1` 行数校验失败时生成待处理问题。
 
 ## 21. P1：执行校验闭环回归
 
-- [ ] `P1` 准备测试 Oracle 源表和 PostgreSQL 目标库。
+- [x] `P1` 准备测试 Oracle 源表和 PostgreSQL 目标库。
 - [x] `P1` 验证已审核 SQL 基线可以生成迁移计划。
 - [x] `P1` 验证未审核 SQL 不能生成正式迁移计划。
-- [!] `P1` 验证 DDL 能执行到 PostgreSQL。
-- [ ] `P1` 验证小表 COPY 后行数一致。
+- [x] `P1` 验证 DDL 能执行到 PostgreSQL。
+- [x] `P1` 验证小表 COPY 后行数一致。
 - [x] `P1` 验证 DDL 错误能定位到对象和 SQL。
-- [ ] `P1` 验证 COPY 错误能定位到表和批次。
-- [ ] `P1` 验证校验失败能回流为待处理问题。
-- [ ] `P1` 验证 COPY 迁移时 heap 占用稳定。
-- [ ] `P1` 验证 shard 完成后 FFM arena 释放。
+- [x] `P1` 验证 COPY 错误能定位到表和批次。
+- [x] `P1` 验证校验失败能回流为待处理问题。
+- [x] `P1` 验证 COPY 迁移时 heap 占用稳定。
+- [x] `P1` 验证 shard 完成后 FFM arena 释放。
 
 ## 22. P2：高速数据迁移
 
@@ -480,12 +480,12 @@
 - [x] `P0` 验证 MCP tool allowlist 和超时。
 - [x] `P0` 验证 Skill YAML 加载和 schema validation。
 - [x] `P0` 验证 Agent 状态机暂停、失败和审计。
-- [ ] `P1` 验证 Oracle `DBMS_METADATA` 权限和输出。
-- [ ] `P1` 验证 Oracle `ALL_SOURCE` 可访问性。
-- [ ] `P1` 验证 pgJDBC CopyManager 写入。
-- [ ] `P1` 验证 Java 25 虚拟线程和 JDBC 连接池配合。
+- [x] `P1` 验证 Oracle `DBMS_METADATA` 权限和输出。
+- [x] `P1` 验证 Oracle `ALL_SOURCE` 可访问性。
+- [x] `P1` 验证 pgJDBC CopyManager 写入。
+- [x] `P1` 验证 Java 25 虚拟线程和 JDBC 连接池配合。
 - [x] `P1` 验证 Java 25 FFM `MemorySegment` 和 `Arena` 生命周期。
-- [ ] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
+- [x] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
 - [x] `P1` 验证堆外内存预算耗尽时的限流行为。
 - [ ] `P2` 验证大表分片策略。
 - [ ] `P2` 验证 checksum 成本。
@@ -534,4 +534,5 @@ MVP 完成时，用户应该可以：
 - 未审核或报告过期时不能导出正式 SQL 包。
 
 这才是第一版真正可用的产品闭环。
+
 
