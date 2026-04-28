@@ -399,22 +399,22 @@
 
 ## 22. P2：高速数据迁移
 
-- [ ] `P2` 大表识别。
-- [ ] `P2` 主键 range 分片。
-- [ ] `P2` hash 分片 fallback。
-- [ ] `P2` shard checkpoint。
-- [ ] `P2` 断点续传。
-- [ ] `P2` shard 级重试。
-- [ ] `P2` 项目级并发限制。
-- [ ] `P2` 表级并发限制。
-- [ ] `P2` 全局并发限制。
+- [x] `P2` 大表识别。
+- [x] `P2` 主键 range 分片。
+- [x] `P2` hash 分片 fallback。
+- [x] `P2` shard checkpoint。
+- [x] `P2` 断点续传。
+- [x] `P2` shard 级重试。
+- [x] `P2` 项目级并发限制。
+- [x] `P2` 表级并发限制。
+- [x] `P2` 全局并发限制。
 - [ ] `P2` LOB 迁移优化。
 - [ ] `P2` LOB 分块读取使用 FFM 缓冲。
 - [ ] `P2` checksum 使用 FFM 分片缓冲。
-- [ ] `P2` 迁移限速。
-- [ ] `P2` 暂停任务。
-- [ ] `P2` 取消任务。
-- [ ] `P2` 恢复任务。
+- [x] `P2` 迁移限速。
+- [x] `P2` 暂停任务。
+- [x] `P2` 取消任务。
+- [x] `P2` 恢复任务。
 
 ## 23. P2：校验
 
@@ -487,7 +487,7 @@
 - [x] `P1` 验证 Java 25 FFM `MemorySegment` 和 `Arena` 生命周期。
 - [x] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
 - [x] `P1` 验证堆外内存预算耗尽时的限流行为。
-- [ ] `P2` 验证大表分片策略。
+- [x] `P2` 验证大表分片策略。
 - [ ] `P2` 验证 checksum 成本。
 
 ## 28. Definition of Done

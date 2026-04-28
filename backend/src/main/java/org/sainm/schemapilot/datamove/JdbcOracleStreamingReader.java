@@ -18,7 +18,50 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
 
     @Override
     public long stream(UUID sourceDataSourceId, String sourceTable, List<String> columns, Consumer<TableRow> rowConsumer) {
+        return streamSql(sourceDataSourceId, sourceTable, columns, null, rowConsumer);
+    }
+
+    @Override
+    public long streamShard(UUID sourceDataSourceId, String sourceTable, List<String> columns, DataMoveShard shard, Consumer<TableRow> rowConsumer) {
+        return streamSql(sourceDataSourceId, sourceTable, columns, shard.predicate(), rowConsumer);
+    }
+
+    @Override
+    public long estimateRows(UUID sourceDataSourceId, String sourceTable) {
+        try (var connection = dataSourceConfigService.openConnection(sourceDataSourceId);
+             var statement = connection.createStatement();
+             var resultSet = statement.executeQuery("select count(*) from " + sourceTable)) {
+            return resultSet.next() ? resultSet.getLong(1) : -1;
+        } catch (Exception ex) {
+            throw new DataMoveException("Oracle row estimate failed for " + sourceTable + ": " + ex.getMessage(), ex);
+        }
+    }
+
+    @Override
+    public NumericBounds numericBounds(UUID sourceDataSourceId, String sourceTable, String shardColumn) {
+        var sql = "select min(" + quote(shardColumn) + "), max(" + quote(shardColumn) + ") from " + sourceTable;
+        try (var connection = dataSourceConfigService.openConnection(sourceDataSourceId);
+             var statement = connection.createStatement();
+             var resultSet = statement.executeQuery(sql)) {
+            if (!resultSet.next()) {
+                return NumericBounds.unknown();
+            }
+            var min = resultSet.getObject(1);
+            var max = resultSet.getObject(2);
+            if (min == null || max == null) {
+                return NumericBounds.unknown();
+            }
+            return new NumericBounds(resultSet.getLong(1), resultSet.getLong(2));
+        } catch (Exception ex) {
+            return NumericBounds.unknown();
+        }
+    }
+
+    private long streamSql(UUID sourceDataSourceId, String sourceTable, List<String> columns, String predicate, Consumer<TableRow> rowConsumer) {
         var sql = "select " + columns.stream().map(this::quote).collect(Collectors.joining(", ")) + " from " + sourceTable;
+        if (predicate != null && !predicate.isBlank()) {
+            sql += " where " + predicate;
+        }
         var count = 0L;
         try (var connection = dataSourceConfigService.openConnection(sourceDataSourceId);
              var statement = connection.createStatement()) {

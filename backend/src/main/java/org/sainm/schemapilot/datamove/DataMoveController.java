@@ -36,6 +36,21 @@ public class DataMoveController {
         return ApiResponse.ok(service.retry(jobId));
     }
 
+    @PostMapping("/{jobId}/pause")
+    public ApiResponse<DataMoveJob> pause(@PathVariable UUID jobId) {
+        return ApiResponse.ok(service.pause(jobId));
+    }
+
+    @PostMapping("/{jobId}/resume")
+    public ApiResponse<DataMoveJob> resume(@PathVariable UUID jobId) {
+        return ApiResponse.ok(service.resume(jobId));
+    }
+
+    @PostMapping("/{jobId}/cancel")
+    public ApiResponse<DataMoveJob> cancel(@PathVariable UUID jobId) {
+        return ApiResponse.ok(service.cancel(jobId));
+    }
+
     @GetMapping("/{jobId}/events")
     public SseEmitter events(@PathVariable UUID jobId) {
         return service.subscribe(jobId);

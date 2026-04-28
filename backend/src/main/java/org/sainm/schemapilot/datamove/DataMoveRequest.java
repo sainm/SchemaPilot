@@ -18,6 +18,17 @@ public record DataMoveRequest(
         String targetTable,
         @NotEmpty
         List<String> columns,
-        long expectedRows
+        long expectedRows,
+        long estimatedRows,
+        long largeTableThreshold,
+        long shardSize,
+        String shardColumn,
+        int projectConcurrencyLimit,
+        int globalConcurrencyLimit,
+        int tableConcurrencyLimit,
+        long rateLimitRowsPerSecond
 ) {
+    public DataMoveRequest(UUID sourceDataSourceId, UUID targetDataSourceId, String sourceTable, String targetTable, List<String> columns, long expectedRows) {
+        this(sourceDataSourceId, targetDataSourceId, sourceTable, targetTable, columns, expectedRows, -1, 100_000, 50_000, null, 4, 8, 1, 0);
+    }
 }

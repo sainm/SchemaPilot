@@ -1,10 +1,8 @@
 package org.sainm.schemapilot.datamove;
 
-public enum DataMoveStatus {
-    QUEUED,
+public enum DataMoveShardStatus {
+    PENDING,
     RUNNING,
-    PAUSED,
-    CANCELLED,
     COMPLETED,
     FAILED
 }
