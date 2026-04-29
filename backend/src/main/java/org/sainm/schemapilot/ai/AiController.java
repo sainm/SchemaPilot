@@ -50,4 +50,39 @@ public class AiController {
     public ApiResponse<AiSuggestionDraft> summarizePrecheck(@Valid @RequestBody PrecheckSummaryRequest request) {
         return ApiResponse.ok(aiProvider.summarizePrecheck(request));
     }
+
+    @PostMapping("/diagnose-execution-error")
+    public ApiResponse<AiSuggestionDraft> diagnoseExecutionError(@Valid @RequestBody ExecutionErrorDiagnosisRequest request) {
+        return ApiResponse.ok(aiProvider.diagnoseExecutionError(request));
+    }
+
+    @PostMapping("/diagnose-validation-diff")
+    public ApiResponse<AiSuggestionDraft> diagnoseValidationDiff(@Valid @RequestBody ValidationDiffDiagnosisRequest request) {
+        return ApiResponse.ok(aiProvider.diagnoseValidationDiff(request));
+    }
+
+    @PostMapping("/suggest-rule-candidate")
+    public ApiResponse<AiSuggestionDraft> suggestRuleCandidate(@Valid @RequestBody RuleCandidateRequest request) {
+        return ApiResponse.ok(aiProvider.suggestRuleCandidate(request));
+    }
+
+    @PostMapping("/ask-project")
+    public ApiResponse<AiSuggestionDraft> answerProjectQuestion(@Valid @RequestBody ProjectQuestionRequest request) {
+        return ApiResponse.ok(aiProvider.answerProjectQuestion(request));
+    }
+
+    @PostMapping("/summarize-long-plsql")
+    public ApiResponse<AiSuggestionDraft> summarizeLongPlsql(@Valid @RequestBody LongPlsqlSummaryRequest request) {
+        return ApiResponse.ok(aiProvider.summarizeLongPlsql(request));
+    }
+
+    @PostMapping("/plan-package-modernization")
+    public ApiResponse<AiSuggestionDraft> planPackageModernization(@Valid @RequestBody PackageModernizationRequest request) {
+        return ApiResponse.ok(aiProvider.planPackageModernization(request));
+    }
+
+    @GetMapping("/usage-stats")
+    public ApiResponse<AiUsageStats> usageStats() {
+        return ApiResponse.ok(aiProvider.usageStats());
+    }
 }

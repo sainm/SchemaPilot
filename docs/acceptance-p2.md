@@ -36,6 +36,16 @@
 - dynamic SQL 标注增强：`EXECUTE IMMEDIATE` 额外生成 bind/format 审查风险。
 - exception 语义差异提示：识别 `EXCEPTION`、`NO_DATA_FOUND`、`TOO_MANY_ROWS`、`SQLCODE`、`SQLERRM`、`WHEN OTHERS`。
 
+## AI 增强
+
+- AI 执行错误诊断：`POST /api/ai/diagnose-execution-error` 根据 DDL/COPY/runtime 错误生成原因和下一步建议。
+- AI 校验差异排查建议：`POST /api/ai/diagnose-validation-diff` 根据 row count、sample、checksum、view、routine 问题生成排查路径。
+- AI 规则沉淀建议：`POST /api/ai/suggest-rule-candidate` 从人工编辑或 AI 建议中生成待审核规则候选说明。
+- AI 项目级自然语言问答：`POST /api/ai/ask-project` 基于项目摘要、风险和对象清单回答迁移问题。
+- AI 长 PL/SQL 分块摘要：`POST /api/ai/summarize-long-plsql` 按 chunk 汇总长 PL/SQL 的动态 SQL、异常、内置包和 routine 信息。
+- AI package 改造方案生成：`POST /api/ai/plan-package-modernization` 生成 package routine 拆分、状态迁移和内置包替代方案。
+- AI 成本统计预留：`GET /api/ai/usage-stats` 输出 mock provider 的请求数、估算 token 和估算成本，前端看板待补。
+
 ## 验证
 
 - `DataMoveServiceTest.movesSmallTableAndRecordsRowsThroughputAndMemory`
@@ -53,6 +63,9 @@
 - `ManualSqlAnalysisServiceTest.keepsTriggerBlockAsSingleDraftStatement`
 - `ManualSqlAnalysisServiceTest.enhancesPlsqlRoutineAndBuiltinPackageSuggestions`
 - `ManualSqlAnalysisServiceTest.analyzesPackageBodyRoutinesAndReplacementHints`
+- `MockAiProviderTest.diagnosesExecutionErrorsAndValidationDiffs`
+- `MockAiProviderTest.suggestsRulesAnswersProjectQuestionsAndTracksUsage`
+- `MockAiProviderTest.summarizesLongPlsqlAndPlansPackageModernization`
 
 执行命令：
 

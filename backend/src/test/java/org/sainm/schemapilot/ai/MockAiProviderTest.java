@@ -71,4 +71,75 @@ class MockAiProviderTest {
         assertThat(summary.suggestion()).contains("10").contains("3");
         assertThat(rewrite.promptVersion()).isEqualTo("sql-rewrite-v1");
     }
+
+    @Test
+    void diagnosesExecutionErrorsAndValidationDiffs() {
+        var execution = provider.diagnoseExecutionError(new ExecutionErrorDiagnosisRequest(
+                "DDL",
+                "users_view",
+                "VIEW",
+                "create view users_view as select * from missing_table",
+                "ERROR: relation missing_table does not exist"
+        ));
+        var validation = provider.diagnoseValidationDiff(new ValidationDiffDiagnosisRequest(
+                "users",
+                "SHARD_CHECKSUM",
+                "0:10:123",
+                "0:10:456",
+                java.util.List.of("SHARD_CHECKSUM_MISMATCH", "SAMPLE_ROWS_MISMATCH")
+        ));
+
+        assertThat(execution.promptVersion()).isEqualTo("execution-error-diagnosis-v1");
+        assertThat(execution.suggestion()).contains("dependency order").contains("schema");
+        assertThat(validation.promptVersion()).isEqualTo("validation-diff-diagnosis-v1");
+        assertThat(validation.suggestion()).contains("shard index").contains("sample rows");
+    }
+
+    @Test
+    void suggestsRulesAnswersProjectQuestionsAndTracksUsage() {
+        var rule = provider.suggestRuleCandidate(new RuleCandidateRequest(
+                "manual-edit",
+                "VIEW",
+                "select NVL(name, 'n/a') from users",
+                "select COALESCE(name, 'n/a') from users",
+                java.util.List.of("NVL")
+        ));
+        var answer = provider.answerProjectQuestion(new ProjectQuestionRequest(
+                "What should we migrate first?",
+                "20 tables, 3 packages, 1 blocker",
+                java.util.List.of("PACKAGE", "DYNAMIC_SQL"),
+                java.util.List.of("PKG_BILLING", "USERS")
+        ));
+
+        assertThat(rule.promptVersion()).isEqualTo("rule-candidate-v1");
+        assertThat(rule.suggestion()).contains("disabled until a reviewer approves");
+        assertThat(answer.promptVersion()).isEqualTo("project-question-v1");
+        assertThat(answer.suggestion()).contains("blockers").contains("precheck report");
+        assertThat(provider.usageStats().requestCount()).isGreaterThanOrEqualTo(2);
+        assertThat(provider.usageStats().promptCounts()).containsKeys("rule-candidate", "project-question");
+    }
+
+    @Test
+    void summarizesLongPlsqlAndPlansPackageModernization() {
+        var sql = """
+                CREATE OR REPLACE PACKAGE BODY pkg_demo AS
+                  PROCEDURE run_it IS
+                  BEGIN
+                    DBMS_OUTPUT.PUT_LINE('x');
+                    EXECUTE IMMEDIATE 'select 1 from dual';
+                  EXCEPTION
+                    WHEN OTHERS THEN NULL;
+                  END;
+                END;
+                /
+                """;
+
+        var summary = provider.summarizeLongPlsql(new LongPlsqlSummaryRequest("pkg_demo", "PACKAGE_BODY", sql, 80));
+        var plan = provider.planPackageModernization(new PackageModernizationRequest("pkg_demo", sql));
+
+        assertThat(summary.promptVersion()).isEqualTo("long-plsql-summary-v1");
+        assertThat(summary.suggestion()).contains("chunk 1").contains("dynamic SQL");
+        assertThat(plan.promptVersion()).isEqualTo("package-modernization-v1");
+        assertThat(plan.suggestion()).contains("procedure run_it").contains("DBMS_OUTPUT");
+    }
 }
