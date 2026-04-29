@@ -46,6 +46,16 @@
 - AI package 改造方案生成：`POST /api/ai/plan-package-modernization` 生成 package routine 拆分、状态迁移和内置包替代方案。
 - AI 成本统计预留：`GET /api/ai/usage-stats` 输出 mock provider 的请求数、估算 token 和估算成本，前端看板待补。
 
+## 规则沉淀闭环
+
+- 从人工编辑 SQL 抽取规则候选：`POST /api/rule-candidates` 支持 `MANUAL_EDIT` 来源。
+- 从 AI 建议抽取规则候选：同一入口支持 `AI_SUGGESTION` 来源。
+- 人工确认门禁：候选必须通过 `POST /api/rule-candidates/{candidateId}/review` 审核通过后才允许启用。
+- 测试样例：`POST /api/rule-candidates/{candidateId}/fixtures` 追加正向或负向 fixture。
+- 测试后启用：`POST /api/rule-candidates/{candidateId}/enable` 会运行全部 fixture，失败时进入 `TEST_FAILED`，不会启用。
+- 重新转换同类 SQL：`POST /api/rule-candidates/reapply` 只应用 `ENABLED` 且 scope 匹配的规则。
+- 来源追溯：候选记录 source、sourceProject、reviewer、riskType、objectType、pattern、replacement。
+
 ## 验证
 
 - `DataMoveServiceTest.movesSmallTableAndRecordsRowsThroughputAndMemory`
@@ -66,6 +76,9 @@
 - `MockAiProviderTest.diagnosesExecutionErrorsAndValidationDiffs`
 - `MockAiProviderTest.suggestsRulesAnswersProjectQuestionsAndTracksUsage`
 - `MockAiProviderTest.summarizesLongPlsqlAndPlansPackageModernization`
+- `RuleCandidateServiceTest.extractsManualEditRuleRequiresReviewAndReappliesAfterFixturesPass`
+- `RuleCandidateServiceTest.rejectedCandidateDoesNotEnable`
+- `RuleCandidateServiceTest.fixtureFailurePreventsEnablement`
 
 执行命令：
 
