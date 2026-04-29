@@ -28,4 +28,24 @@ public class KnowledgeController {
     public ApiResponse<List<KnowledgeSearchResult>> search(@Valid @RequestBody KnowledgeSearchRequest request) {
         return ApiResponse.ok(knowledgeService.search(request));
     }
+
+    @PostMapping("/multi-recall")
+    public ApiResponse<KnowledgeMultiRecallResponse> multiRecall(@Valid @RequestBody KnowledgeSearchRequest request) {
+        return ApiResponse.ok(knowledgeService.multiRecall(request));
+    }
+
+    @PostMapping("/historical-cases")
+    public ApiResponse<KnowledgeChunk> addHistoricalCase(@Valid @RequestBody HistoricalCaseRequest request) {
+        return ApiResponse.ok(knowledgeService.addHistoricalCase(request));
+    }
+
+    @PostMapping("/feedback")
+    public ApiResponse<KnowledgeMetrics> feedback(@Valid @RequestBody KnowledgeFeedbackRequest request) {
+        return ApiResponse.ok(knowledgeService.feedback(request));
+    }
+
+    @GetMapping("/metrics")
+    public ApiResponse<KnowledgeMetrics> metrics() {
+        return ApiResponse.ok(knowledgeService.metrics());
+    }
 }

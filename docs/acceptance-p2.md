@@ -56,6 +56,14 @@
 - 重新转换同类 SQL：`POST /api/rule-candidates/reapply` 只应用 `ENABLED` 且 scope 匹配的规则。
 - 来源追溯：候选记录 source、sourceProject、reviewer、riskType、objectType、pattern、replacement。
 
+## RAG 和知识库增强
+
+- RAG 多路召回：`POST /api/knowledge/multi-recall` 同时使用 lexical、metadata、local-embedding 三路候选。
+- RAG rerank：候选按 lexical、metadata、local embedding cosine 和 title boost 综合重排。
+- 历史案例脱敏入库：`POST /api/knowledge/historical-cases` 以 `CASE` 类型写入，沿用敏感信息脱敏。
+- 本地 embedding 模型适配：`LocalEmbeddingAdapter` 提供本地 hash embedding 和 cosine 相似度，后续可替换真实 embedding 模型。
+- 知识库命中率和采纳率指标：`POST /api/knowledge/feedback` 记录采纳/拒绝，`GET /api/knowledge/metrics` 返回 hitRate 和 adoptionRate。
+
 ## 验证
 
 - `DataMoveServiceTest.movesSmallTableAndRecordsRowsThroughputAndMemory`
@@ -79,6 +87,9 @@
 - `RuleCandidateServiceTest.extractsManualEditRuleRequiresReviewAndReappliesAfterFixturesPass`
 - `RuleCandidateServiceTest.rejectedCandidateDoesNotEnable`
 - `RuleCandidateServiceTest.fixtureFailurePreventsEnablement`
+- `KnowledgeServiceTest.multiRecallUsesLexicalMetadataAndLocalEmbeddingThenReranks`
+- `KnowledgeServiceTest.storesHistoricalCaseAfterRedactionAndTracksFeedback`
+- `KnowledgeServiceTest.localEmbeddingAdapterProducesComparableVectors`
 
 执行命令：
 
