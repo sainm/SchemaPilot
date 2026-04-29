@@ -11,9 +11,11 @@ import java.util.stream.Collectors;
 @Component
 public class JdbcOracleStreamingReader implements OracleStreamingReader {
     private final DataSourceConfigService dataSourceConfigService;
+    private final OracleLobValueReader lobValueReader;
 
-    public JdbcOracleStreamingReader(DataSourceConfigService dataSourceConfigService) {
+    public JdbcOracleStreamingReader(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager) {
         this.dataSourceConfigService = dataSourceConfigService;
+        this.lobValueReader = new OracleLobValueReader(memoryBudgetManager);
     }
 
     @Override
@@ -70,7 +72,7 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
                 while (resultSet.next()) {
                     var values = new java.util.ArrayList<String>();
                     for (int i = 0; i < columns.size(); i++) {
-                        values.add(resultSet.getString(i + 1));
+                        values.add(lobValueReader.read(resultSet.getObject(i + 1)));
                     }
                     rowConsumer.accept(new TableRow(List.copyOf(values)));
                     count++;

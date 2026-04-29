@@ -11,6 +11,8 @@
 - 并发限制：实现项目、全局和目标表级并发门禁，避免多个 COPY 任务同时压垮源库或目标库。
 - 限速：支持按 rows/s 控制迁移速率。
 - 暂停/取消/恢复：新增 API 控制长任务生命周期，并通过 SSE 推送状态。
+- LOB 迁移优化：Oracle reader 对 CLOB/BLOB 使用独立 `OracleLobValueReader`，避免 `getString` 对大字段的一次性读取路径。
+- LOB 分块 FFM 缓冲：`FfmLobChunkBuffer` 使用 Java 25 FFM `Arena` 和 `MemorySegment` 分块读取 CLOB/BLOB，CLOB 输出文本，BLOB 输出 PostgreSQL bytea hex 文本。
 - checksum FFM 分片缓冲：新增 `FfmChecksumBuffer`，用于分片校验时以堆外缓冲计算 CRC32，完成后释放 `Arena` 和内存租约。
 
 ## 校验闭环
@@ -32,6 +34,9 @@
 - `DataMoveServiceTest.largeTableUsesRangeShardsAndCheckpointsCompletedShards`
 - `DataMoveServiceTest.largeTableFallsBackToHashShardsWhenBoundsAreUnknown`
 - `DataMoveServiceTest.canPauseResumeAndCancelLongRunningMove`
+- `OracleLobValueReaderTest.readsClobThroughFfmChunksAndReleasesMemory`
+- `OracleLobValueReaderTest.readsBlobAsPostgresByteaHexThroughFfmChunks`
+- `OracleLobValueReaderTest.readsByteArrayAsPostgresByteaHex`
 - `ValidationReportServiceTest.createsPassingValidationReport`
 - `ValidationReportServiceTest.reportsRowCountSampleChecksumViewAndRoutineFailures`
 - `ValidationReportServiceTest.ffmChecksumBufferReleasesOffHeapMemory`
@@ -47,5 +52,5 @@
 ## 未完成项
 
 - 项目级并发限制当前按目标数据源归组，后续引入正式迁移项目 ID 后可替换控制 key。
-- LOB 迁移优化和 LOB 分块 FFM 缓冲尚未实现。
+- LOB 迁移吞吐基准和数据库真实大 LOB 压测尚未实现。
 - checksum 成本验证尚未实现。
