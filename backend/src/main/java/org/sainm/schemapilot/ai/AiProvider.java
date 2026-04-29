@@ -35,6 +35,10 @@ public interface AiProvider {
         return unsupported("package-modernization");
     }
 
+    default AiSuggestionDraft recommendRuleTemplates(HistoricalRuleTemplateRequest request) {
+        return unsupported("historical-rule-template");
+    }
+
     default AiUsageStats usageStats() {
         return new AiUsageStats(0, 0, 0, 0, Map.of());
     }

@@ -153,4 +153,16 @@ class AiContextBuilder {
                 redactor.redact(request.packageSql())
         ).strip();
     }
+
+    String historicalRuleTemplateContext(HistoricalRuleTemplateRequest request) {
+        return """
+                objectType=%s
+                riskTypes=%s
+                historicalCases=%s
+                """.formatted(
+                redactor.redact(request.objectType()),
+                request.riskTypes() == null ? java.util.List.of() : request.riskTypes().stream().map(redactor::redact).toList(),
+                request.historicalCases() == null ? java.util.List.of() : request.historicalCases().stream().map(redactor::redact).toList()
+        ).strip();
+    }
 }

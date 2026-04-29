@@ -444,7 +444,7 @@
 - [x] `P2` AI 执行错误诊断。
 - [x] `P2` AI 校验差异排查建议。
 - [x] `P2` AI 规则沉淀建议。
-- [ ] `P2` AI 基于历史项目推荐规则模板。
+- [x] `P2` AI 基于历史项目推荐规则模板。
 - [x] `P2` AI 项目级自然语言问答。
 - [x] `P2` AI 长 PL/SQL 分块摘要。
 - [x] `P2` AI package 改造方案生成。
@@ -488,7 +488,7 @@
 - [x] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
 - [x] `P1` 验证堆外内存预算耗尽时的限流行为。
 - [x] `P2` 验证大表分片策略。
-- [ ] `P2` 验证 checksum 成本。
+- [x] `P2` 验证 checksum 成本。
 
 ## 28. Definition of Done
 

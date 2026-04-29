@@ -15,9 +15,11 @@ import java.util.UUID;
 @RequestMapping("/api/validation-reports")
 public class ValidationReportController {
     private final ValidationReportService service;
+    private final ChecksumCostService checksumCostService;
 
-    public ValidationReportController(ValidationReportService service) {
+    public ValidationReportController(ValidationReportService service, ChecksumCostService checksumCostService) {
         this.service = service;
+        this.checksumCostService = checksumCostService;
     }
 
     @PostMapping
@@ -28,5 +30,10 @@ public class ValidationReportController {
     @GetMapping("/{reportId}")
     public ApiResponse<ValidationReport> get(@PathVariable UUID reportId) {
         return ApiResponse.ok(service.get(reportId));
+    }
+
+    @PostMapping("/checksum-cost")
+    public ApiResponse<ChecksumCostReport> checksumCost(@RequestBody ChecksumCostRequest request) {
+        return ApiResponse.ok(checksumCostService.benchmark(request));
     }
 }

@@ -193,6 +193,37 @@ class MockAiProvider implements AiProvider {
     }
 
     @Override
+    public AiSuggestionDraft recommendRuleTemplates(HistoricalRuleTemplateRequest request) {
+        var risks = request.riskTypes() == null ? List.<String>of() : request.riskTypes();
+        var cases = request.historicalCases() == null ? List.<String>of() : request.historicalCases();
+        var templates = new ArrayList<String>();
+        for (var risk : risks) {
+            var normalized = risk.toUpperCase(Locale.ROOT);
+            if ("NVL".equals(normalized)) {
+                templates.add("NVL_TO_COALESCE: replace NVL(expr, fallback) with COALESCE(expr, fallback), then verify type inference.");
+            } else if ("CURRENT_TIME".equals(normalized) || "DATE_SEMANTICS".equals(normalized)) {
+                templates.add("ORACLE_TIME_TO_TIMESTAMP: map SYSDATE/SYSTIMESTAMP and DATE defaults to reviewed PostgreSQL timestamp semantics.");
+            } else if ("PACKAGE".equals(normalized)) {
+                templates.add("PACKAGE_SPLIT: split stateless package routines first, then isolate package state.");
+            } else if ("DYNAMIC_SQL".equals(normalized)) {
+                templates.add("EXECUTE_IMMEDIATE_TO_EXECUTE_USING: rewrite generated SQL with EXECUTE format(...) USING ...");
+            }
+        }
+        if (templates.isEmpty()) {
+            templates.add("MANUAL_REVIEW_TEMPLATE: create a disabled rule candidate from the accepted SQL diff and require reviewer fixtures.");
+        }
+        var suggestion = """
+                Historical rule template recommendation for objectType=%s
+                Historical evidence count: %d
+                Recommended templates:
+                %s
+                Enablement rule: convert each template into a rule candidate, add historical positive and negative fixtures, then require reviewer approval.
+                """.formatted(safe(request.objectType()), cases.size(), String.join("\n", templates));
+        var chunks = knowledgeService.multiRecall(new KnowledgeSearchRequest(String.join(" ", risks) + " " + String.join(" ", cases), Map.of(), 5));
+        return draft("historical-rule-template", suggestion.strip(), List.of(contextBuilder.historicalRuleTemplateContext(request)), chunkKeys(chunks.results()));
+    }
+
+    @Override
     public AiUsageStats usageStats() {
         var counts = new LinkedHashMap<String, Long>();
         promptCounts.entrySet().stream()

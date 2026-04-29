@@ -34,7 +34,8 @@ public class AiGovernanceRegistry {
                 new PromptTemplate("rule-candidate", "rule-candidate-v1", "Propose a human-reviewed conversion rule candidate.", "source + original SQL + revised SQL + risk types", true, now),
                 new PromptTemplate("project-question", "project-question-v1", "Answer project-level migration questions using summarized project context.", "question + project summary + top risks + object names", true, now),
                 new PromptTemplate("long-plsql-summary", "long-plsql-summary-v1", "Summarize long PL/SQL in chunks.", "object + chunk summaries + sensitive-data redaction", true, now),
-                new PromptTemplate("package-modernization", "package-modernization-v1", "Generate an Oracle package modernization plan.", "package source + routines + state + built-in package usage", true, now)
+                new PromptTemplate("package-modernization", "package-modernization-v1", "Generate an Oracle package modernization plan.", "package source + routines + state + built-in package usage", true, now),
+                new PromptTemplate("historical-rule-template", "historical-rule-template-v1", "Recommend rule templates from historical migration cases.", "current risks + object type + historical cases + enabled rule hints", true, now)
         );
     }
 

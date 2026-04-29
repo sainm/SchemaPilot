@@ -142,4 +142,20 @@ class MockAiProviderTest {
         assertThat(plan.promptVersion()).isEqualTo("package-modernization-v1");
         assertThat(plan.suggestion()).contains("procedure run_it").contains("DBMS_OUTPUT");
     }
+
+    @Test
+    void recommendsRuleTemplatesFromHistoricalProjectSignals() {
+        var recommendation = provider.recommendRuleTemplates(new HistoricalRuleTemplateRequest(
+                "VIEW",
+                java.util.List.of("NVL", "DYNAMIC_SQL"),
+                java.util.List.of("project-a accepted NVL to COALESCE in account views")
+        ));
+
+        assertThat(recommendation.promptVersion()).isEqualTo("historical-rule-template-v1");
+        assertThat(recommendation.suggestion())
+                .contains("NVL_TO_COALESCE")
+                .contains("EXECUTE_IMMEDIATE_TO_EXECUTE_USING")
+                .contains("reviewer approval");
+        assertThat(recommendation.evidence()).allMatch(value -> !value.contains("password="));
+    }
 }

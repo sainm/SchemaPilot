@@ -81,6 +81,11 @@ public class AiController {
         return ApiResponse.ok(aiProvider.planPackageModernization(request));
     }
 
+    @PostMapping("/recommend-rule-templates")
+    public ApiResponse<AiSuggestionDraft> recommendRuleTemplates(@Valid @RequestBody HistoricalRuleTemplateRequest request) {
+        return ApiResponse.ok(aiProvider.recommendRuleTemplates(request));
+    }
+
     @GetMapping("/usage-stats")
     public ApiResponse<AiUsageStats> usageStats() {
         return ApiResponse.ok(aiProvider.usageStats());

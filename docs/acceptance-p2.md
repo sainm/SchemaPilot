@@ -44,6 +44,7 @@
 - AI 项目级自然语言问答：`POST /api/ai/ask-project` 基于项目摘要、风险和对象清单回答迁移问题。
 - AI 长 PL/SQL 分块摘要：`POST /api/ai/summarize-long-plsql` 按 chunk 汇总长 PL/SQL 的动态 SQL、异常、内置包和 routine 信息。
 - AI package 改造方案生成：`POST /api/ai/plan-package-modernization` 生成 package routine 拆分、状态迁移和内置包替代方案。
+- AI 基于历史项目推荐规则模板：`POST /api/ai/recommend-rule-templates` 基于当前风险和历史案例提示推荐规则模板，并要求转换成待审核 rule candidate。
 - AI 成本统计预留：`GET /api/ai/usage-stats` 输出 mock provider 的请求数、估算 token 和估算成本，前端看板待补。
 
 ## 规则沉淀闭环
@@ -63,6 +64,10 @@
 - 历史案例脱敏入库：`POST /api/knowledge/historical-cases` 以 `CASE` 类型写入，沿用敏感信息脱敏。
 - 本地 embedding 模型适配：`LocalEmbeddingAdapter` 提供本地 hash embedding 和 cosine 相似度，后续可替换真实 embedding 模型。
 - 知识库命中率和采纳率指标：`POST /api/knowledge/feedback` 记录采纳/拒绝，`GET /api/knowledge/metrics` 返回 hitRate 和 adoptionRate。
+
+## 校验成本验证
+
+- checksum 成本验证：`POST /api/validation-reports/checksum-cost` 使用 `FfmChecksumBuffer` 对合成行数据执行分片 checksum，返回耗时、rows/s、估算 payload bytes 和 FFM 释放状态。
 
 ## 验证
 
@@ -84,12 +89,14 @@
 - `MockAiProviderTest.diagnosesExecutionErrorsAndValidationDiffs`
 - `MockAiProviderTest.suggestsRulesAnswersProjectQuestionsAndTracksUsage`
 - `MockAiProviderTest.summarizesLongPlsqlAndPlansPackageModernization`
+- `MockAiProviderTest.recommendsRuleTemplatesFromHistoricalProjectSignals`
 - `RuleCandidateServiceTest.extractsManualEditRuleRequiresReviewAndReappliesAfterFixturesPass`
 - `RuleCandidateServiceTest.rejectedCandidateDoesNotEnable`
 - `RuleCandidateServiceTest.fixtureFailurePreventsEnablement`
 - `KnowledgeServiceTest.multiRecallUsesLexicalMetadataAndLocalEmbeddingThenReranks`
 - `KnowledgeServiceTest.storesHistoricalCaseAfterRedactionAndTracksFeedback`
 - `KnowledgeServiceTest.localEmbeddingAdapterProducesComparableVectors`
+- `ChecksumCostServiceTest.benchmarksChecksumCostAndReleasesFfmBuffers`
 
 执行命令：
 
