@@ -26,6 +26,16 @@
 - 校验报告：`POST /api/validation-reports` 生成报告，`GET /api/validation-reports/{reportId}` 读取报告。
 - 失败详情：报告聚合所有 `ValidationIssue`，包含等级、代码、对象名、shard 和说明。
 
+## PL/SQL 增强
+
+- trigger 转换增强：生成 PostgreSQL trigger function skeleton 和 trigger binding，明确 `:NEW`/`:OLD` 映射审查点。
+- function/procedure 转换增强：生成 PL/pgSQL skeleton，保留参数、异常块、dynamic SQL 迁移提示。
+- package spec/body 分析：识别 package 与 package body 中的 routine signature、全局状态候选。
+- package routine 拆解：报告中列出可拆解为 PostgreSQL function/procedure 的候选 routine。
+- Oracle 内置包替代建议：识别 `DBMS_OUTPUT`、`DBMS_LOB`、`DBMS_RANDOM`、`UTL_FILE`、`DBMS_SCHEDULER`、`DBMS_SQL` 并给出替代方向。
+- dynamic SQL 标注增强：`EXECUTE IMMEDIATE` 额外生成 bind/format 审查风险。
+- exception 语义差异提示：识别 `EXCEPTION`、`NO_DATA_FOUND`、`TOO_MANY_ROWS`、`SQLCODE`、`SQLERRM`、`WHEN OTHERS`。
+
 ## 验证
 
 - `DataMoveServiceTest.movesSmallTableAndRecordsRowsThroughputAndMemory`
@@ -40,6 +50,9 @@
 - `ValidationReportServiceTest.createsPassingValidationReport`
 - `ValidationReportServiceTest.reportsRowCountSampleChecksumViewAndRoutineFailures`
 - `ValidationReportServiceTest.ffmChecksumBufferReleasesOffHeapMemory`
+- `ManualSqlAnalysisServiceTest.keepsTriggerBlockAsSingleDraftStatement`
+- `ManualSqlAnalysisServiceTest.enhancesPlsqlRoutineAndBuiltinPackageSuggestions`
+- `ManualSqlAnalysisServiceTest.analyzesPackageBodyRoutinesAndReplacementHints`
 
 执行命令：
 

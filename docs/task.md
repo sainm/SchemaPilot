@@ -429,15 +429,15 @@
 
 ## 24. P2：PL/SQL 增强
 
-- [ ] `P2` trigger 转换增强。
-- [ ] `P2` function 转换增强。
-- [ ] `P2` procedure 转换增强。
-- [ ] `P2` package spec 分析。
-- [ ] `P2` package body 分析。
-- [ ] `P2` package routine 拆解。
-- [ ] `P2` Oracle 内置包替代建议。
-- [ ] `P2` dynamic SQL 标注增强。
-- [ ] `P2` exception 语义差异提示。
+- [x] `P2` trigger 转换增强。
+- [x] `P2` function 转换增强。
+- [x] `P2` procedure 转换增强。
+- [x] `P2` package spec 分析。
+- [x] `P2` package body 分析。
+- [x] `P2` package routine 拆解。
+- [x] `P2` Oracle 内置包替代建议。
+- [x] `P2` dynamic SQL 标注增强。
+- [x] `P2` exception 语义差异提示。
 
 ## 25. P2：AI 增强
 
