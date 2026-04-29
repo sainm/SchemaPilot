@@ -45,7 +45,7 @@
 - AI 长 PL/SQL 分块摘要：`POST /api/ai/summarize-long-plsql` 按 chunk 汇总长 PL/SQL 的动态 SQL、异常、内置包和 routine 信息。
 - AI package 改造方案生成：`POST /api/ai/plan-package-modernization` 生成 package routine 拆分、状态迁移和内置包替代方案。
 - AI 基于历史项目推荐规则模板：`POST /api/ai/recommend-rule-templates` 基于当前风险和历史案例提示推荐规则模板，并要求转换成待审核 rule candidate。
-- AI 成本统计预留：`GET /api/ai/usage-stats` 输出 mock provider 的请求数、估算 token 和估算成本，前端看板待补。
+- AI 成本统计和用量看板：`GET /api/ai/usage-stats` 输出 mock provider 的请求数、估算 token、估算成本和 prompt 维度计数，可作为前端看板数据源。
 
 ## 规则沉淀闭环
 
