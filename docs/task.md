@@ -472,11 +472,11 @@
 - [x] `P0` 验证 AI Provider 抽象。
 - [x] `P0` 验证 AI 提示词脱敏。
 - [x] `P0` 验证 AI 建议保存和审计。
-- [!] `P0` 验证 pgvector 扩展可用性。
-- [!] `P0` 验证 Spring AI PgVectorStore。
+- [x] `P0` 验证 pgvector 扩展可用性。
+- [x] `P0` 验证 Spring AI PgVectorStore。
 - [x] `P0` 验证知识 chunk metadata filter。
 - [x] `P0` 验证 embedding 前脱敏。
-- [!] `P0` 验证 Spring AI MCP Java SDK。
+- [x] `P0` 验证 Spring AI MCP Java SDK。
 - [x] `P0` 验证 MCP tool allowlist 和超时。
 - [x] `P0` 验证 Skill YAML 加载和 schema validation。
 - [x] `P0` 验证 Agent 状态机暂停、失败和审计。
