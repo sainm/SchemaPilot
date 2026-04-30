@@ -48,6 +48,8 @@ psql "postgresql://schemapilot:schemapilot@localhost:5432/schemapilot" -c "SELEC
 - `TechnicalSpikeServiceTest.reportsSpringAiPgVectorReadinessWithoutOwningTableCreation`
 - `TechnicalSpikeServiceTest.reportsMcpSdkReadinessPreservingSecurityBoundary`
 - `TechnicalSpikeServiceTest.redactsJdbcUrlsFromPgVectorProbeFailures`
+- `LocalFirstAiProviderTest.usesLocalLlmWhenEnabledAndKeepsPromptRedacted`
+- `LocalFirstAiProviderTest.fallsBackToMockWhenLocalLlmIsDisabled`
 
 Command:
 

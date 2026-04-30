@@ -28,11 +28,13 @@ Cloud LLM providers are optional adapters and must be explicitly enabled. They a
 
 - `AiGovernanceRegistry` lists `local-openai-compatible` first and marks it as `preferredForPrivateDeployment`.
 - `AiProviderConfig.knowledgeMode` records whether a provider uses `local-rag` or redacted local context.
+- `LocalFirstAiProvider` is the primary `AiProvider`: it calls the local OpenAI-compatible endpoint when `schemapilot.ai.enabled=true` and falls back to `MockAiProvider` when local inference is disabled, unavailable, or returns an invalid response.
+- `LocalLlmClient` calls `/v1/chat/completions` and sends only redacted context plus cited local knowledge excerpts.
 - `application.yml` declares `schemapilot.ai.mode=local-first`.
 - `KnowledgeService.multiRecall` keeps lexical, metadata, and local embedding recall inside the application boundary.
 
 ## Next Hardening Tasks
 
-- Add a real local OpenAI-compatible `AiProvider` adapter behind the existing `AiProvider` interface.
 - Add a pgvector-backed `KnowledgeRepository` or Spring AI PgVectorStore adapter without changing `KnowledgeService` callers.
+- Add local LLM health checks, model discovery, timeout metrics, and fallback counters.
 - Add UI status for local LLM endpoint health, selected local model, knowledge hit rate, and cloud disabled/enabled state.

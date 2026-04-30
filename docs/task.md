@@ -148,6 +148,7 @@
 - [x] `P0` 预留云端模型 provider 配置。
 - [x] `P0` 预留本地模型 provider 配置。
 - [x] `P0` 将本地 LLM provider 标记为私有化部署优先路径。
+- [x] `P1` 实现本地 OpenAI-compatible LLM provider，并保留 mock fallback。
 - [x] `P0` 创建提示词模板版本机制。
 - [x] `P0` 实现 AI 上下文构建器。
 - [x] `P0` 实现敏感信息脱敏。
