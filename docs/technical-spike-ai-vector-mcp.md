@@ -7,7 +7,8 @@ Date: 2026-04-30
 - pgvector is no longer blocked at the SchemaPilot level. The platform now has a JDBC probe endpoint that checks whether the PostgreSQL target has the `vector` extension installed or available.
 - Spring AI PgVectorStore is no longer a product blocker. SchemaPilot keeps `KnowledgeService` and `KnowledgeRepository` as the application-facing port, so a PgVectorStore-backed adapter can be added without changing AI, RAG, or report code.
 - Spring AI MCP Java SDK is no longer a product blocker. SchemaPilot keeps `McpGateway` as the security boundary and can expose its current resources, prompts, and tools through the SDK later.
-- The current default remains safe local fallback: in-memory knowledge store, `LocalEmbeddingAdapter`, MCP allowlist, dry-run write tools, and audit records.
+- The product default is local-first: local LLM, local knowledge base, local RAG/embedding, MCP allowlist, dry-run write tools, and audit records. Cloud LLM providers are opt-in adapters only.
+- The current safe fallback remains in-memory knowledge store plus `LocalEmbeddingAdapter`; pgvector is the local PostgreSQL vector index target when available.
 
 ## Official References
 

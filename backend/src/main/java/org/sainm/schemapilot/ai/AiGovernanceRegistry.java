@@ -19,9 +19,42 @@ public class AiGovernanceRegistry {
             @Value("${schemapilot.ai.local.model:qwen2.5-coder:latest}") String localModel
     ) {
         this.providerConfigs = List.of(
-                new AiProviderConfig("mock", AiProviderType.MOCK, "Local mock provider", "in-process", "schemapilot-rule-backed", true, false),
-                new AiProviderConfig("cloud-openai-compatible", AiProviderType.CLOUD, "Cloud OpenAI-compatible provider", cloudEndpoint, cloudModel, false, cloudSecretConfigured),
-                new AiProviderConfig("local-openai-compatible", AiProviderType.LOCAL, "Local OpenAI-compatible provider", localEndpoint, localModel, false, false)
+                new AiProviderConfig(
+                        "local-openai-compatible",
+                        AiProviderType.LOCAL,
+                        "Local LLM provider (OpenAI-compatible)",
+                        localEndpoint,
+                        localModel,
+                        false,
+                        false,
+                        "local-rag",
+                        true,
+                        false
+                ),
+                new AiProviderConfig(
+                        "mock",
+                        AiProviderType.MOCK,
+                        "Local mock provider",
+                        "in-process",
+                        "schemapilot-rule-backed",
+                        true,
+                        false,
+                        "local-rag",
+                        false,
+                        false
+                ),
+                new AiProviderConfig(
+                        "cloud-openai-compatible",
+                        AiProviderType.CLOUD,
+                        "Cloud OpenAI-compatible provider",
+                        cloudEndpoint,
+                        cloudModel,
+                        false,
+                        cloudSecretConfigured,
+                        "redacted-local-rag-context",
+                        false,
+                        true
+                )
         );
         var now = Instant.now();
         this.promptTemplates = List.of(

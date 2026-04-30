@@ -30,5 +30,12 @@ management:
 schemapilot:
   ai:
     enabled: false
+    mode: local-first
+    local:
+      endpoint: ${SCHEMAPILOT_LOCAL_LLM_ENDPOINT:http://localhost:11434}
+      model: ${SCHEMAPILOT_LOCAL_LLM_MODEL:qwen2.5-coder:latest}
+      knowledge-base: local-rag
+    cloud:
+      enabled: false
   migration:
     off-heap-memory-limit: 512MB

@@ -7,6 +7,9 @@ public record AiProviderConfig(
         String endpoint,
         String defaultModel,
         boolean enabled,
-        boolean secretConfigured
+        boolean secretConfigured,
+        String knowledgeMode,
+        boolean preferredForPrivateDeployment,
+        boolean externalNetworkRequired
 ) {
 }
