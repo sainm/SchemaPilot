@@ -506,12 +506,15 @@
 - [ ] `P3` FFM 堆外内存增加硬水位，达到阈值时拒绝新 shard 分配。
 - [ ] `P3` Agent 运行增加最大 step budget，超限转人工处理。
 - [ ] `P3` 将虚拟线程执行 slot 与数据源连接池容量绑定。
+- [ ] `P3` 增加连接等待、slot 等待、执行耗时指标，用于定位连接池背压瓶颈。
+- [ ] `P3` 落地 `ORACLE_EMPTY_STRING_AS_NULL` 默认策略，并接入预检展示和 COPY 编码。
 - [ ] `P3` 数据迁移校验后生成 sequence reset 步骤。
 - [ ] `P3` 迁移计划生成 Undo Script 并支持失败后 dry-run 回滚预览。
 - [ ] `P3` Oracle 扫描采集 NLS_SORT、NLS_COMP、字符集和 collation 影响。
 - [ ] `P3` 预处理报告对重复 LOW/MEDIUM 风险做聚类折叠。
 - [ ] `P3` 大型 PL/SQL/package 使用 AST outline 和风险切片进入 AI，而不是全文提示词。
 - [ ] `P3` Agent 增加 token/cost budget，超限转人工处理。
+- [ ] `P3` MCP/Skill 调用增加 retry budget、失败归因和循环等待阻断。
 
 ## 29. Definition of Done
 
