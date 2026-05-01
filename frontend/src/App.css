@@ -75,6 +75,10 @@
   min-height: 420px;
 }
 
+[id^='section-'] {
+  scroll-margin-top: 88px;
+}
+
 .panel-header {
   align-items: center;
   display: flex;

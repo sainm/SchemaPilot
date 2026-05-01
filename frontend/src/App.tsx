@@ -44,6 +44,8 @@ type PipelineItem = {
   artifact: string
 }
 
+type MenuKey = 'dashboard' | 'imports' | 'inventory' | 'workbench' | 'ai' | 'review' | 'execution'
+
 type ProjectItem = {
   id: string
   name: string
@@ -373,6 +375,16 @@ const pipelineColumns: ColumnsType<PipelineItem> = [
     },
   },
 ]
+
+const menuTargets: Record<MenuKey, string> = {
+  dashboard: 'section-dashboard',
+  imports: 'section-imports',
+  inventory: 'section-inventory',
+  workbench: 'section-workbench',
+  ai: 'section-ai',
+  review: 'section-review',
+  execution: 'section-execution',
+}
 
 const projectColumns: ColumnsType<ProjectItem> = [
   {
@@ -840,6 +852,7 @@ function App() {
   const [riskLevelFilter, setRiskLevelFilter] = useState('ALL')
   const [targetSqlDraftByStatement, setTargetSqlDraftByStatement] = useState<Record<number, string>>({})
   const [pushedFileImportJob, setPushedFileImportJob] = useState<FileImportJob | null>(null)
+  const [activeMenuKey, setActiveMenuKey] = useState<MenuKey>('dashboard')
   const [dataSourceDraft, setDataSourceDraft] = useState({
     name: 'oracle-source',
     kind: 'ORACLE' as DataSourceConfig['kind'],
@@ -889,6 +902,15 @@ function App() {
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
   const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
 
+  const scrollToMenuTarget = (key: MenuKey) => {
+    setActiveMenuKey(key)
+    const target = document.getElementById(menuTargets[key]) ?? document.getElementById('section-inventory') ?? document.getElementById('section-dashboard')
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      window.history.replaceState(null, '', `#${menuTargets[key]}`)
+    }
+  }
+
   useEffect(() => {
     if (!fileImportJobId) {
       return
@@ -920,7 +942,8 @@ function App() {
           <Menu
             theme="dark"
             mode="inline"
-            defaultSelectedKeys={['dashboard']}
+            selectedKeys={[activeMenuKey]}
+            onClick={({ key }) => scrollToMenuTarget(key as MenuKey)}
             items={[
               { key: 'dashboard', icon: <FileSearchOutlined />, label: '项目总览' },
               { key: 'imports', icon: <CloudUploadOutlined />, label: '输入源' },
@@ -946,7 +969,7 @@ function App() {
           </Layout.Header>
 
           <Layout.Content className="content">
-            <section className="summary-band">
+            <section id="section-dashboard" className="summary-band">
               <StatisticCard
                 statistic={{
                   title: '闭环完成度',
@@ -989,7 +1012,7 @@ function App() {
             />
 
             <section className="workspace-grid">
-              <div className="panel wide">
+              <div id="section-inventory" className="panel wide">
                 <div className="panel-header">
                   <Space>
                     <CodeOutlined />
@@ -1043,7 +1066,7 @@ function App() {
                       })}
                     />
                     {selectedStatement && (
-                      <div className="workbench-panel">
+                      <div id="section-workbench" className="workbench-panel">
                         <div className="workbench-toolbar">
                           <Space wrap>
                             <Typography.Text strong>{selectedStatement.objectType} {selectedStatement.objectName}</Typography.Text>
@@ -1212,7 +1235,7 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div id="section-imports" className="panel">
                 <div className="panel-header">
                   <Space>
                     <CloudUploadOutlined />
@@ -1277,7 +1300,7 @@ function App() {
               </div>
 
               {workbenchSnapshot && (
-                <div className="panel">
+                <div id="section-review" className="panel">
                   <div className="panel-header">
                     <Space>
                       <AuditOutlined />
@@ -1427,7 +1450,7 @@ function App() {
                 <Table columns={pipelineColumns} dataSource={pipeline} pagination={false} size="middle" />
               </div>
 
-              <div className="panel">
+              <div id="section-ai" className="panel">
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
@@ -1448,7 +1471,7 @@ function App() {
                 />
               </div>
 
-              <div className="panel">
+              <div id="section-execution" className="panel">
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
