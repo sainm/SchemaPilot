@@ -64,7 +64,10 @@ class ManualSqlAnalysisServiceTest {
         var statement = response.statements().getFirst();
         assertThat(statement.objectType()).isEqualTo(ObjectType.TRIGGER);
         assertThat(statement.conversionLevel()).isEqualTo(ConversionLevel.DRAFT);
-        assertThat(statement.postgresSql()).contains("requires a PostgreSQL trigger function");
+        assertThat(statement.postgresSql())
+                .contains("RETURNS trigger")
+                .contains("CREATE TRIGGER trg_users_bi")
+                .contains("Oracle :NEW maps to NEW");
         assertThat(statement.risks())
                 .extracting(DetectedRisk::type)
                 .contains("TRIGGER_BODY", "CURRENT_TIME");
@@ -84,9 +87,14 @@ class ManualSqlAnalysisServiceTest {
         var statement = response.statements().getFirst();
         assertThat(statement.objectType()).isEqualTo(ObjectType.PACKAGE);
         assertThat(statement.conversionLevel()).isEqualTo(ConversionLevel.MANUAL_REQUIRED);
+        assertThat(statement.postgresSql())
+                .contains("Package routines discovered")
+                .contains("procedure run_it")
+                .contains("Package global state candidates")
+                .contains("g_counter");
         assertThat(statement.risks())
                 .extracting(DetectedRisk::type)
-                .contains("PACKAGE", "PACKAGE_GLOBAL_STATE");
+                .contains("PACKAGE", "PACKAGE_ROUTINE_DECOMPOSITION", "PACKAGE_GLOBAL_STATE");
     }
 
     @Test
@@ -109,8 +117,78 @@ class ManualSqlAnalysisServiceTest {
                         "EMPTY_STRING_NULL",
                         "QUOTED_IDENTIFIER",
                         "DYNAMIC_SQL",
+                        "DYNAMIC_SQL_BINDING",
+                        "PLSQL_ROUTINE_DRAFT",
                         "AUTONOMOUS_TRANSACTION"
                 );
+    }
+
+    @Test
+    void enhancesPlsqlRoutineAndBuiltinPackageSuggestions() {
+        var response = service.analyze("""
+                CREATE OR REPLACE FUNCTION next_token(p_seed IN NUMBER)
+                RETURN VARCHAR2
+                AS
+                  v_token VARCHAR2(100);
+                BEGIN
+                  DBMS_OUTPUT.PUT_LINE('seed=' || p_seed);
+                  v_token := DBMS_RANDOM.STRING('x', 12);
+                  EXECUTE IMMEDIATE 'select token from tokens where id = :1' INTO v_token USING p_seed;
+                  RETURN v_token;
+                EXCEPTION
+                  WHEN NO_DATA_FOUND THEN
+                    RETURN NULL;
+                END;
+                /
+                """);
+
+        var statement = response.statements().getFirst();
+
+        assertThat(statement.objectType()).isEqualTo(ObjectType.FUNCTION);
+        assertThat(statement.postgresSql())
+                .contains("CREATE OR REPLACE function next_token")
+                .contains("LANGUAGE plpgsql")
+                .contains("EXECUTE format")
+                .contains("EXCEPTION");
+        assertThat(statement.risks())
+                .extracting(DetectedRisk::type)
+                .contains(
+                        "ORACLE_BUILTIN_PACKAGE",
+                        "DYNAMIC_SQL",
+                        "DYNAMIC_SQL_BINDING",
+                        "EXCEPTION_SEMANTICS",
+                        "PLSQL_ROUTINE_DRAFT"
+                );
+    }
+
+    @Test
+    void analyzesPackageBodyRoutinesAndReplacementHints() {
+        var response = service.analyze("""
+                CREATE OR REPLACE PACKAGE BODY pkg_file AS
+                  PROCEDURE write_it(p_name IN VARCHAR2) IS
+                  BEGIN
+                    UTL_FILE.PUT_LINE(NULL, p_name);
+                    DBMS_LOB.CREATETEMPORARY(NULL, TRUE);
+                  END;
+                  FUNCTION calc_it RETURN NUMBER IS
+                  BEGIN
+                    RETURN 1;
+                  END;
+                END pkg_file;
+                /
+                """);
+
+        var statement = response.statements().getFirst();
+
+        assertThat(statement.objectType()).isEqualTo(ObjectType.PACKAGE_BODY);
+        assertThat(statement.postgresSql())
+                .contains("procedure write_it")
+                .contains("function calc_it")
+                .contains("UTL_FILE -> external file service")
+                .contains("DBMS_LOB -> PostgreSQL text/bytea functions");
+        assertThat(statement.risks())
+                .extracting(DetectedRisk::type)
+                .contains("PACKAGE", "PACKAGE_ROUTINE_DECOMPOSITION", "ORACLE_BUILTIN_PACKAGE");
     }
 
     @Test
@@ -145,10 +223,10 @@ class ManualSqlAnalysisServiceTest {
         assertThat(response.statements())
                 .extracting(AnalyzedStatement::objectType)
                 .containsExactly(ObjectType.TRIGGER, ObjectType.FUNCTION, ObjectType.PACKAGE);
-        assertThat(response.statements().get(1).postgresSql()).contains("requires PL/pgSQL review");
+        assertThat(response.statements().get(1).postgresSql()).contains("PL/pgSQL review skeleton");
         assertThat(response.statements().get(2).risks())
                 .extracting(DetectedRisk::type)
-                .contains("PACKAGE", "PACKAGE_GLOBAL_STATE");
+                .contains("PACKAGE", "PACKAGE_GLOBAL_STATE", "PACKAGE_ROUTINE_DECOMPOSITION");
     }
 
     @Test

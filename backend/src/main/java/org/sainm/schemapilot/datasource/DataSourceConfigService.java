@@ -32,7 +32,7 @@ public class DataSourceConfigService {
                 UUID.randomUUID(),
                 request.name(),
                 request.kind(),
-                redactor.redact(request.jdbcUrl()),
+                request.jdbcUrl(),
                 request.username(),
                 passwordCipher.encrypt(request.password()),
                 DataSourceConfigStatus.DRAFT,

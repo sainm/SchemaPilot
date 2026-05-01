@@ -1,25 +1,29 @@
 import {
   ApiOutlined,
   AuditOutlined,
+  ArrowRightOutlined,
   BranchesOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloudUploadOutlined,
   CodeOutlined,
   DatabaseOutlined,
   DownloadOutlined,
+  ExperimentOutlined,
   FileSearchOutlined,
   PlusOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
-import Editor from '@monaco-editor/react'
-import { StatisticCard } from '@ant-design/pro-components'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, ConfigProvider, Input, Layout, Menu, Progress, Select, Space, Table, Tag, Typography, Upload } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import axios from 'axios'
 import './App.css'
+
+const SqlEditor = lazy(() => import('@monaco-editor/react'))
 
 type HealthPayload = {
   service: string
@@ -40,8 +44,32 @@ type PipelineItem = {
   key: string
   stage: string
   owner: string
-  status: 'ready' | 'next' | 'planned'
+  status: 'completed'
   artifact: string
+}
+
+type MenuKey = 'dashboard' | 'imports' | 'inventory' | 'workbench' | 'ai' | 'rules' | 'review' | 'execution'
+
+type ViewMeta = {
+  title: string
+  description: string
+}
+
+type WorkflowCheck = {
+  key: string
+  label: string
+  detail: string
+  done: boolean
+  action: MenuKey
+}
+
+type RuleCandidate = {
+  id: string
+  source: string
+  title: string
+  condition: string
+  impact: string
+  status: 'CANDIDATE' | 'REVIEW_REQUIRED' | 'TEST_READY' | 'ENABLED'
 }
 
 type ProjectItem = {
@@ -93,6 +121,36 @@ type AiSuggestionDraft = {
   suggestion: string
   evidence: string[]
   citedChunkKeys: string[]
+}
+
+type LocalLlmStatus = {
+  enabled: boolean
+  endpoint: string
+  model: string
+  reachable: boolean
+  discoveredModels: string[]
+  timeoutMs: number
+  requestCount: number
+  timeoutCount: number
+  failureCount: number
+  fallbackCount: number
+  lastError: string
+}
+
+type KnowledgeMetrics = {
+  searchCount: number
+  hitCount: number
+  acceptedCount: number
+  rejectedCount: number
+  hitRate: number
+  adoptionRate: number
+}
+
+type AiProviderConfig = {
+  type: string
+  enabled: boolean
+  endpoint?: string | null
+  model?: string | null
 }
 
 type SavedAiSuggestion = {
@@ -168,6 +226,8 @@ type FileImportJob = {
   progressPercent: number
   analysis?: SqlAnalysisResponse | null
   errorMessage?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 type HighRiskObject = {
@@ -312,12 +372,12 @@ type MigrationPlan = {
 }
 
 const pipeline: PipelineItem[] = [
-  { key: '1', stage: '输入源', owner: 'Ingest', status: 'ready', artifact: 'InputSource' },
-  { key: '2', stage: '对象识别', owner: 'Parser', status: 'next', artifact: 'DbObject / ParseIssue' },
-  { key: '3', stage: '规则转换', owner: 'Converter', status: 'planned', artifact: 'ConversionResult' },
-  { key: '4', stage: 'AI 建议', owner: 'AI Copilot', status: 'planned', artifact: 'AiSuggestion' },
-  { key: '5', stage: '预处理报告', owner: 'Report', status: 'planned', artifact: 'PrecheckReport' },
-  { key: '6', stage: '审核和基线', owner: 'Review', status: 'planned', artifact: 'ReviewRecord / Baseline SQL' },
+  { key: '1', stage: '输入源', owner: 'Ingest', status: 'completed', artifact: 'InputSource' },
+  { key: '2', stage: '对象识别', owner: 'Parser', status: 'completed', artifact: 'DbObject / ParseIssue' },
+  { key: '3', stage: '规则转换', owner: 'Converter', status: 'completed', artifact: 'ConversionResult' },
+  { key: '4', stage: 'AI 建议', owner: 'AI Copilot', status: 'completed', artifact: 'AiSuggestion' },
+  { key: '5', stage: '预处理报告', owner: 'Report', status: 'completed', artifact: 'PrecheckReport' },
+  { key: '6', stage: '审核和基线', owner: 'Review', status: 'completed', artifact: 'ReviewRecord / Baseline SQL' },
 ]
 
 const pipelineColumns: ColumnsType<PipelineItem> = [
@@ -339,12 +399,56 @@ const pipelineColumns: ColumnsType<PipelineItem> = [
     key: 'status',
     width: 140,
     render: (value: PipelineItem['status']) => {
-      const color = value === 'ready' ? 'green' : value === 'next' ? 'blue' : 'default'
-      const label = value === 'ready' ? '已启动' : value === 'next' ? '下一步' : '待实现'
-      return <Tag color={color}>{label}</Tag>
+      return <Tag color={value === 'completed' ? 'green' : 'default'}>已闭环</Tag>
     },
   },
 ]
+
+const menuTargets: Record<MenuKey, string> = {
+  dashboard: 'section-dashboard',
+  imports: 'section-imports',
+  inventory: 'section-inventory',
+  workbench: 'section-workbench',
+  ai: 'section-ai',
+  rules: 'section-rules',
+  review: 'section-review',
+  execution: 'section-execution',
+}
+
+const viewMeta: Record<MenuKey, ViewMeta> = {
+  dashboard: {
+    title: '项目总览',
+    description: '查看迁移闭环、系统状态和当前项目进展。',
+  },
+  imports: {
+    title: '输入源',
+    description: '输入手工 SQL 或上传 SQL 文件，生成可追溯输入源。',
+  },
+  inventory: {
+    title: '对象清单',
+    description: '查看解析出的对象、风险、转换等级和兼容性评分。',
+  },
+  workbench: {
+    title: '转换工作台',
+    description: '对比 Oracle 原文和 PostgreSQL 目标 SQL，处理风险和 AI 建议。',
+  },
+  ai: {
+    title: 'AI 副驾驶',
+    description: '查看本地 LLM、RAG、Agent、MCP 和 Skills 的运行状态。',
+  },
+  rules: {
+    title: '规则沉淀',
+    description: '把人工修改、AI 建议和执行修复沉淀成可审核、可测试、可启用的转换规则。',
+  },
+  review: {
+    title: '审核中心',
+    description: '生成预处理报告，提交审核，冻结 SQL 基线并导出 SQL 包。',
+  },
+  execution: {
+    title: '迁移计划',
+    description: '维护数据源，生成迁移计划并执行已审核的 DDL。',
+  },
+}
 
 const projectColumns: ColumnsType<ProjectItem> = [
   {
@@ -442,6 +546,42 @@ function useBackendHealth() {
     },
     retry: false,
     refetchInterval: 10000,
+  })
+}
+
+function useLocalLlmStatus() {
+  return useQuery({
+    queryKey: ['local-llm-status'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<LocalLlmStatus>>('/api/ai/local-status')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 10000,
+  })
+}
+
+function useKnowledgeMetrics() {
+  return useQuery({
+    queryKey: ['knowledge-metrics'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<KnowledgeMetrics>>('/api/knowledge/metrics')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 10000,
+  })
+}
+
+function useAiProviderConfigs() {
+  return useQuery({
+    queryKey: ['ai-provider-configs'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<AiProviderConfig[]>>('/api/ai/provider-configs')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 30000,
   })
 }
 
@@ -591,7 +731,10 @@ function useUploadSqlFile() {
   return useMutation({
     mutationFn: async (file: File) => {
       const body = new FormData()
+      const uploadFile = file as File & { webkitRelativePath?: string }
+      const relativePath = uploadFile.webkitRelativePath || uploadFile.name
       body.append('file', file)
+      body.append('relativePath', relativePath)
       body.append('encoding', 'UTF-8')
       const response = await axios.post<ApiResponse<FileImportJob>>('/api/file-import/sql', body)
       return response.data.data
@@ -608,17 +751,11 @@ function useSaveFileImportSnapshot() {
   })
 }
 
-function useFileImportJob(jobId?: string) {
-  return useQuery({
-    queryKey: ['file-import-job', jobId],
-    queryFn: async () => {
-      const response = await axios.get<ApiResponse<FileImportJob>>(`/api/file-import/jobs/${jobId}`)
+function useCreateFileImportBatchSnapshot() {
+  return useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const response = await axios.post<ApiResponse<WorkbenchSnapshot>>('/api/workbench/file-import-jobs', { jobIds })
       return response.data.data
-    },
-    enabled: Boolean(jobId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'COMPLETED' || status === 'FAILED' ? false : 1000
     },
   })
 }
@@ -737,6 +874,9 @@ function useExecuteMigrationPlan() {
 
 function App() {
   const health = useBackendHealth()
+  const localLlmStatus = useLocalLlmStatus()
+  const knowledgeMetrics = useKnowledgeMetrics()
+  const aiProviderConfigs = useAiProviderConfigs()
   const projects = useProjects()
   const dataSources = useDataSources()
   const createDataSource = useCreateDataSource()
@@ -756,6 +896,7 @@ function App() {
   const restoreGeneratedSql = useRestoreGeneratedSql()
   const uploadSqlFile = useUploadSqlFile()
   const saveFileImportSnapshot = useSaveFileImportSnapshot()
+  const createFileImportBatchSnapshot = useCreateFileImportBatchSnapshot()
   const skills = useSkills()
   const mcpStatus = useMcpStatus()
   const mcpResources = useMcpResources()
@@ -767,12 +908,13 @@ function App() {
   const [manualSql, setManualSql] = useState(sampleSql)
   const [workbenchSnapshot, setWorkbenchSnapshot] = useState<WorkbenchSnapshot | null>(null)
   const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | null>(null)
-  const [fileImportJobId, setFileImportJobId] = useState<string>()
+  const [fileImportJobsById, setFileImportJobsById] = useState<Record<string, FileImportJob>>({})
+  const [selectedFileImportJobId, setSelectedFileImportJobId] = useState<string>()
   const [selectedStatementIndex, setSelectedStatementIndex] = useState<number>()
   const [objectTypeFilter, setObjectTypeFilter] = useState('ALL')
   const [riskLevelFilter, setRiskLevelFilter] = useState('ALL')
-  const [targetSqlDraft, setTargetSqlDraft] = useState('')
-  const [pushedFileImportJob, setPushedFileImportJob] = useState<FileImportJob | null>(null)
+  const [targetSqlDraftByStatement, setTargetSqlDraftByStatement] = useState<Record<number, string>>({})
+  const [activeMenuKey, setActiveMenuKey] = useState<MenuKey>('dashboard')
   const [dataSourceDraft, setDataSourceDraft] = useState({
     name: 'oracle-source',
     kind: 'ORACLE' as DataSourceConfig['kind'],
@@ -780,9 +922,13 @@ function App() {
     username: 'system',
     password: '',
   })
-  const fileImportJob = useFileImportJob(fileImportJobId)
-  const visibleFileImportJob = pushedFileImportJob ?? fileImportJob.data
-  const activeAnalysis = analyzeSql.data ?? visibleFileImportJob?.analysis ?? null
+  const visibleFileImportJobs = useMemo(
+    () => Object.values(fileImportJobsById).sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    [fileImportJobsById],
+  )
+  const selectedFileImportJob = selectedFileImportJobId ? fileImportJobsById[selectedFileImportJobId] : visibleFileImportJobs[0]
+  const completedFileImportJobs = visibleFileImportJobs.filter((job) => job.status === 'COMPLETED')
+  const activeAnalysis = analyzeSql.data ?? selectedFileImportJob?.analysis ?? null
   const filteredStatements = useMemo(() => {
     const statements = activeAnalysis?.statements ?? []
     return statements.filter((statement) => {
@@ -806,6 +952,7 @@ function App() {
       .find((version) => version.statementIndex === selectedStatement.index)
     return latestVersion?.sql ?? selectedStatement.postgresSql
   }, [selectedStatement, workbenchSnapshot])
+  const targetSqlDraft = selectedStatement ? (targetSqlDraftByStatement[selectedStatement.index] ?? latestTargetSql) : ''
   const selectedSavedSuggestion = workbenchSnapshot?.aiSuggestions.find((suggestion) => suggestion.statementIndex === selectedStatement?.index)
   const objectTypeOptions = useMemo(() => {
     const values = Array.from(new Set((activeAnalysis?.statements ?? []).map((statement) => statement.objectType))).sort()
@@ -819,23 +966,137 @@ function App() {
     { value: 'BLOCKER', label: 'BLOCKER' },
   ]
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
+  const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
+  const approvedReviewCount = workbenchSnapshot?.reviewRecords.filter((record) => record.decision === 'APPROVED').length ?? 0
+  const manualEditCount = workbenchSnapshot?.sqlVersions.filter((version) => version.source === 'MANUAL_EDIT').length ?? 0
+  const acceptedSuggestionCount = workbenchSnapshot?.aiSuggestions.filter((suggestion) => suggestion.status === 'ACCEPTED' || suggestion.status === 'APPLIED').length ?? 0
+  const ruleCandidateCount = manualEditCount + acceptedSuggestionCount
+  const ruleCandidates: RuleCandidate[] = useMemo(() => {
+    const candidates: RuleCandidate[] = []
+    if (manualEditCount > 0) {
+      candidates.push({
+        id: 'manual-edit-diff',
+        source: '人工编辑 SQL',
+        title: '从目标 SQL diff 抽取转换规则候选',
+        condition: '同类对象被重复人工修改，且修改前后能形成稳定 AST 差异',
+        impact: `${manualEditCount} 个人工编辑版本可分析`,
+        status: workbenchSnapshot?.baselineFrozen ? 'TEST_READY' : 'REVIEW_REQUIRED',
+      })
+    }
+    if (acceptedSuggestionCount > 0) {
+      candidates.push({
+        id: 'accepted-ai-suggestion',
+        source: '已接受 AI 建议',
+        title: '把已采纳建议转成规则草案和 fixture',
+        condition: 'AI 建议已被人工接受或编辑后应用，不能直接启用',
+        impact: `${acceptedSuggestionCount} 条建议可沉淀`,
+        status: 'CANDIDATE',
+      })
+    }
+    if (candidates.length === 0) {
+      return [
+        {
+          id: 'builtin-nvl',
+          source: '内置样例',
+          title: 'NVL(expr, default) -> COALESCE(expr, default)',
+          condition: '简单表达式可自动转换，嵌套函数和类型不一致时需要审核',
+          impact: '演示候选规则如何进入审核和测试',
+          status: 'ENABLED',
+        },
+        {
+          id: 'builtin-sysdate',
+          source: '内置样例',
+          title: 'SYSDATE -> CURRENT_TIMESTAMP',
+          condition: '涉及时区、DATE 语义或默认值表达式时标记风险',
+          impact: '演示规则命中后仍保留风险提示',
+          status: 'TEST_READY',
+        },
+      ]
+    }
+    return candidates
+  }, [acceptedSuggestionCount, manualEditCount, workbenchSnapshot?.baselineFrozen])
+  const workflowChecks: WorkflowCheck[] = [
+    {
+      key: 'input',
+      label: '完成输入识别',
+      detail: activeAnalysis ? `${activeAnalysis.statementCount} 条语句，${activeAnalysis.riskCount} 个风险` : '分析手工 SQL 或导入 SQL 文件',
+      done: Boolean(activeAnalysis),
+      action: 'imports',
+    },
+    {
+      key: 'snapshot',
+      label: '保存工作快照',
+      detail: workbenchSnapshot ? `快照 ${workbenchSnapshot.id.slice(0, 8)}` : '保存对象、转换结果和 SQL 版本链',
+      done: Boolean(workbenchSnapshot),
+      action: 'workbench',
+    },
+    {
+      key: 'report',
+      label: '生成预处理报告',
+      detail: generatePrecheck.data ? generatePrecheck.data.reportVersion : '形成可审核的资产、风险和建议报告',
+      done: Boolean(generatePrecheck.data),
+      action: 'review',
+    },
+    {
+      key: 'review',
+      label: '通过审核门禁',
+      detail: approvedReviewCount > 0 ? `${approvedReviewCount} 条通过记录` : '审核通过前禁止正式导出和执行',
+      done: approvedReviewCount > 0,
+      action: 'review',
+    },
+    {
+      key: 'baseline',
+      label: '冻结 SQL 基线',
+      detail: workbenchSnapshot?.baselineFrozen ? workbenchSnapshot.baselineStatus : '基线冻结后才能生成正式迁移计划',
+      done: Boolean(workbenchSnapshot?.baselineFrozen),
+      action: 'review',
+    },
+    {
+      key: 'execution',
+      label: '生成迁移计划',
+      detail: migrationPlan ? `${migrationPlan.steps.length} 个执行步骤` : '绑定 PostgreSQL 目标数据源并执行 DDL',
+      done: Boolean(migrationPlan),
+      action: 'execution',
+    },
+    {
+      key: 'rules',
+      label: '沉淀规则候选',
+      detail: ruleCandidateCount > 0 ? `${ruleCandidateCount} 条来源可沉淀` : '从人工编辑、AI 采纳和执行修复中抽取规则',
+      done: ruleCandidateCount > 0,
+      action: 'rules',
+    },
+  ]
+  const completedWorkflowCount = workflowChecks.filter((item) => item.done).length
+  const closedLoopPercent = Math.round((completedWorkflowCount / workflowChecks.length) * 100)
+  const nextWorkflowCheck = workflowChecks.find((item) => !item.done) ?? workflowChecks[workflowChecks.length - 1]
+  const activeFileImportSubscriptionKey = visibleFileImportJobs
+    .filter((job) => job.status !== 'COMPLETED' && job.status !== 'FAILED')
+    .map((job) => job.id)
+    .sort()
+    .join('|')
+
+  const switchView = (key: MenuKey) => {
+    setActiveMenuKey(key)
+    window.history.replaceState(null, '', `#${menuTargets[key]}`)
+  }
+
+  const isActiveView = (...keys: MenuKey[]) => keys.includes(activeMenuKey)
 
   useEffect(() => {
-    setTargetSqlDraft(latestTargetSql)
-  }, [latestTargetSql])
-
-  useEffect(() => {
-    if (!fileImportJobId) {
-      setPushedFileImportJob(null)
+    if (!activeFileImportSubscriptionKey) {
       return
     }
-    const events = new EventSource(`/api/file-import/jobs/${fileImportJobId}/events`)
-    events.addEventListener('file-import-progress', (event) => {
-      setPushedFileImportJob(JSON.parse((event as MessageEvent).data) as FileImportJob)
+    const events = activeFileImportSubscriptionKey.split('|').map((jobId) => {
+      const eventSource = new EventSource(`/api/file-import/jobs/${jobId}/events`)
+      eventSource.addEventListener('file-import-progress', (event) => {
+        const job = JSON.parse((event as MessageEvent).data) as FileImportJob
+        setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+      })
+      eventSource.onerror = () => eventSource.close()
+      return eventSource
     })
-    events.onerror = () => events.close()
-    return () => events.close()
-  }, [fileImportJobId])
+    return () => events.forEach((eventSource) => eventSource.close())
+  }, [activeFileImportSubscriptionKey])
 
   return (
     <ConfigProvider
@@ -856,13 +1117,15 @@ function App() {
           <Menu
             theme="dark"
             mode="inline"
-            defaultSelectedKeys={['dashboard']}
+            selectedKeys={[activeMenuKey]}
+            onClick={({ key }) => switchView(key as MenuKey)}
             items={[
               { key: 'dashboard', icon: <FileSearchOutlined />, label: '项目总览' },
               { key: 'imports', icon: <CloudUploadOutlined />, label: '输入源' },
               { key: 'inventory', icon: <DatabaseOutlined />, label: '对象清单' },
               { key: 'workbench', icon: <CodeOutlined />, label: '转换工作台' },
               { key: 'ai', icon: <RobotOutlined />, label: 'AI 副驾驶' },
+              { key: 'rules', icon: <ExperimentOutlined />, label: '规则沉淀' },
               { key: 'review', icon: <AuditOutlined />, label: '审核中心' },
               { key: 'execution', icon: <BranchesOutlined />, label: '迁移计划' },
             ]}
@@ -873,46 +1136,51 @@ function App() {
           <Layout.Header className="topbar">
             <Space direction="vertical" size={0}>
               <Typography.Title level={4}>Oracle 到 PostgreSQL 迁移项目</Typography.Title>
-              <Typography.Text type="secondary">P0 目标：输入、识别、转换、AI 建议、报告、审核、SQL 包导出闭环</Typography.Text>
+              <Typography.Text type="secondary">覆盖评估、转换、审核、执行、校验、AI/RAG 和规则沉淀的迁移闭环</Typography.Text>
             </Space>
             <Space>
               <Badge status={health.data?.status === 'UP' ? 'success' : 'error'} text={health.data?.status ?? '未连接'} />
-              <Button icon={<SafetyCertificateOutlined />}>审核门禁</Button>
+              <Button icon={<SafetyCertificateOutlined />} onClick={() => switchView('review')}>审核门禁</Button>
             </Space>
           </Layout.Header>
 
           <Layout.Content className="content">
-            <section className="summary-band">
-              <StatisticCard
-                statistic={{
-                  title: '闭环完成度',
-                  value: generatePrecheck.data ? 28 : 20,
-                  suffix: '%',
-                }}
-                chart={<Progress percent={generatePrecheck.data ? 28 : 20} strokeColor="#1677ff" showInfo={false} />}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '兼容性评分',
-                  value: generatePrecheck.data?.analysis.compatibilityScore ?? analyzeSql.data?.compatibilityScore ?? '未计算',
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '报告状态',
-                  value: generatePrecheck.data ? '已生成快照' : '未生成',
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: 'AI / RAG',
-                  value: mcpStatus.data ? '已接入' : '待连接',
-                }}
-              />
+            <div className="view-title">
+              <Space direction="vertical" size={2}>
+                <Typography.Title level={3}>{viewMeta[activeMenuKey].title}</Typography.Title>
+                <Typography.Text type="secondary">{viewMeta[activeMenuKey].description}</Typography.Text>
+              </Space>
+              <Button
+                type={nextWorkflowCheck.done ? 'default' : 'primary'}
+                icon={nextWorkflowCheck.done ? <CheckCircleOutlined /> : <ArrowRightOutlined />}
+                onClick={() => switchView(nextWorkflowCheck.action)}
+              >
+                {nextWorkflowCheck.done ? '查看闭环' : `下一步：${nextWorkflowCheck.label}`}
+              </Button>
+            </div>
+
+            <section id="section-dashboard" className={`summary-band view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
+              <div className="metric-card metric-card-wide">
+                <Typography.Text type="secondary">闭环完成度</Typography.Text>
+                <strong>{closedLoopPercent}%</strong>
+                <Progress percent={closedLoopPercent} strokeColor="#1677ff" showInfo={false} />
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">兼容性评分</Typography.Text>
+                <strong>{generatePrecheck.data?.analysis.compatibilityScore ?? analyzeSql.data?.compatibilityScore ?? '未计算'}</strong>
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">下一步</Typography.Text>
+                <strong>{nextWorkflowCheck.done ? '闭环可复查' : nextWorkflowCheck.label}</strong>
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">AI / RAG</Typography.Text>
+                <strong>{mcpStatus.data ? '已接入' : '待连接'}</strong>
+              </div>
             </section>
 
             <Alert
-              className="status-alert"
+              className={`status-alert view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}
               type={health.data?.status === 'UP' ? 'success' : 'warning'}
               showIcon
               icon={<CheckCircleOutlined />}
@@ -925,7 +1193,7 @@ function App() {
             />
 
             <section className="workspace-grid">
-              <div className="panel wide">
+              <div id="section-inventory" className={`panel wide view-panel ${isActiveView('imports', 'inventory', 'workbench') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <CodeOutlined />
@@ -979,7 +1247,7 @@ function App() {
                       })}
                     />
                     {selectedStatement && (
-                      <div className="workbench-panel">
+                      <div id="section-workbench" className="workbench-panel">
                         <div className="workbench-toolbar">
                           <Space wrap>
                             <Typography.Text strong>{selectedStatement.objectType} {selectedStatement.objectName}</Typography.Text>
@@ -997,7 +1265,16 @@ function App() {
                                 if (workbenchSnapshot) {
                                   restoreGeneratedSql.mutate(
                                     { snapshotId: workbenchSnapshot.id, statementIndex: selectedStatement.index },
-                                    { onSuccess: setWorkbenchSnapshot },
+                                    {
+                                      onSuccess: (snapshot) => {
+                                        setWorkbenchSnapshot(snapshot)
+                                        setTargetSqlDraftByStatement((current) => {
+                                          const next = { ...current }
+                                          delete next[selectedStatement.index]
+                                          return next
+                                        })
+                                      },
+                                    },
                                   )
                                 }
                               }}
@@ -1025,22 +1302,31 @@ function App() {
                         <div className="sql-preview-grid">
                           <div className="editor-pane">
                             <Typography.Text type="secondary">Oracle 原始 SQL</Typography.Text>
-                            <Editor
-                              height="260px"
-                              defaultLanguage="sql"
-                              value={selectedStatement.originalSql}
-                              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
-                            />
+                            <Suspense fallback={<div className="editor-loading">加载 SQL 编辑器...</div>}>
+                              <SqlEditor
+                                height="260px"
+                                defaultLanguage="sql"
+                                value={selectedStatement.originalSql}
+                                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+                              />
+                            </Suspense>
                           </div>
                           <div className="editor-pane">
                             <Typography.Text type="secondary">PostgreSQL 目标 SQL</Typography.Text>
-                            <Editor
-                              height="260px"
-                              defaultLanguage="sql"
-                              value={targetSqlDraft}
-                              onChange={(value) => setTargetSqlDraft(value ?? '')}
-                              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
-                            />
+                            <Suspense fallback={<div className="editor-loading">加载 SQL 编辑器...</div>}>
+                              <SqlEditor
+                                height="260px"
+                                defaultLanguage="sql"
+                                value={targetSqlDraft}
+                                onChange={(value) => {
+                                  setTargetSqlDraftByStatement((current) => ({
+                                    ...current,
+                                    [selectedStatement.index]: value ?? '',
+                                  }))
+                                }}
+                                options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+                              />
+                            </Suspense>
                           </div>
                         </div>
                         {(selectedStatement.risks.length > 0 || selectedStatement.parseIssues.length > 0) && (
@@ -1134,58 +1420,116 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div id="section-imports" className={`panel view-panel ${isActiveView('imports') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <CloudUploadOutlined />
-                    <Typography.Title level={5}>SQL 文件导入</Typography.Title>
+                    <Typography.Title level={5}>输入源批次导入</Typography.Title>
                   </Space>
-                  <Upload
-                    accept=".sql,.txt"
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      uploadSqlFile.mutate(file as File, {
-                        onSuccess: (job) => setFileImportJobId(job.id),
-                      })
-                      return false
-                    }}
-                  >
-                    <Button loading={uploadSqlFile.isPending}>上传</Button>
-                  </Upload>
+                  <Space wrap>
+                    <Upload
+                      accept=".sql,.txt,.zip"
+                      multiple
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        uploadSqlFile.mutate(file as File, {
+                          onSuccess: (job) => {
+                            setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+                            setSelectedFileImportJobId(job.id)
+                          },
+                        })
+                        return false
+                      }}
+                    >
+                      <Button loading={uploadSqlFile.isPending}>上传文件 / zip</Button>
+                    </Upload>
+                    <Upload
+                      accept=".sql,.txt"
+                      directory
+                      multiple
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        uploadSqlFile.mutate(file as File, {
+                          onSuccess: (job) => {
+                            setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+                            setSelectedFileImportJobId(job.id)
+                          },
+                        })
+                        return false
+                      }}
+                    >
+                      <Button loading={uploadSqlFile.isPending}>选择文件夹 / 工程</Button>
+                    </Upload>
+                  </Space>
                 </div>
                 {uploadSqlFile.isError && (
                   <Alert className="inline-alert" type="error" showIcon message="文件上传失败" description={String(uploadSqlFile.error)} />
                 )}
-                {visibleFileImportJob && (
+                {visibleFileImportJobs.length === 0 && (
+                  <Alert
+                    className="inline-alert"
+                    type="info"
+                    showIcon
+                    message="可以导入文件、文件夹、工程目录或 zip 包"
+                    description="文件夹会保留相对路径；zip 包会在后端展开并提取 .sql/.txt；每个来源都会记录 checksum、进度和对象清单。"
+                  />
+                )}
+                {visibleFileImportJobs.length > 0 && (
                   <div className="file-import">
-                    <Space className="analysis-metrics" wrap>
-                      <Tag color="blue">{visibleFileImportJob.fileName}</Tag>
-                      <Tag>{visibleFileImportJob.encoding}</Tag>
-                      <Tag>{visibleFileImportJob.sizeBytes} bytes</Tag>
-                      <Tag color={visibleFileImportJob.status === 'COMPLETED' ? 'green' : visibleFileImportJob.status === 'FAILED' ? 'red' : 'gold'}>
-                        {visibleFileImportJob.status}
-                      </Tag>
-                    </Space>
-                    <Progress percent={visibleFileImportJob.progressPercent} />
-                    <Typography.Text type="secondary">checksum {visibleFileImportJob.checksumSha256.slice(0, 20)}...</Typography.Text>
-                    <div className="agent-actions">
+                    <div className="file-batch-toolbar">
+                      <Space wrap>
+                        <Tag color="blue">文件 {visibleFileImportJobs.length}</Tag>
+                        <Tag color="green">已完成 {completedFileImportJobs.length}</Tag>
+                        <Tag color={visibleFileImportJobs.some((job) => job.status === 'FAILED') ? 'red' : 'default'}>
+                          失败 {visibleFileImportJobs.filter((job) => job.status === 'FAILED').length}
+                        </Tag>
+                      </Space>
                       <Button
                         size="small"
-                        disabled={visibleFileImportJob.status !== 'COMPLETED'}
-                        loading={saveFileImportSnapshot.isPending}
-                        onClick={() => saveFileImportSnapshot.mutate(visibleFileImportJob.id, { onSuccess: setWorkbenchSnapshot })}
+                        type="primary"
+                        disabled={completedFileImportJobs.length === 0}
+                        loading={createFileImportBatchSnapshot.isPending}
+                        onClick={() => createFileImportBatchSnapshot.mutate(completedFileImportJobs.map((job) => job.id), { onSuccess: setWorkbenchSnapshot })}
                       >
-                        保存为快照
+                        合并完成文件为快照
                       </Button>
                     </div>
-                    {visibleFileImportJob.errorMessage && (
-                      <Alert className="inline-alert" type="error" showIcon message={visibleFileImportJob.errorMessage} />
-                    )}
-                    {visibleFileImportJob.analysis && (
+                    <div className="file-import-list">
+                      {visibleFileImportJobs.map((job) => (
+                        <button
+                          key={job.id}
+                          className={`file-import-row ${job.id === selectedFileImportJob?.id ? 'file-import-row-selected' : ''}`}
+                          type="button"
+                          onClick={() => setSelectedFileImportJobId(job.id)}
+                        >
+                          <span className="file-import-main">
+                            <strong>{job.fileName}</strong>
+                            <small>checksum {job.checksumSha256.slice(0, 20)}... / {job.encoding} / {job.sizeBytes} bytes</small>
+                            <Progress percent={job.progressPercent} size="small" showInfo={false} />
+                            {job.errorMessage && <small className="file-import-error">{job.errorMessage}</small>}
+                          </span>
+                          <span className="file-import-side">
+                            <Tag color={job.status === 'COMPLETED' ? 'green' : job.status === 'FAILED' ? 'red' : 'gold'}>{job.status}</Tag>
+                            <Button
+                              size="small"
+                              disabled={job.status !== 'COMPLETED'}
+                              loading={saveFileImportSnapshot.isPending}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                saveFileImportSnapshot.mutate(job.id, { onSuccess: setWorkbenchSnapshot })
+                              }}
+                            >
+                              单文件快照
+                            </Button>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {selectedFileImportJob?.analysis && (
                       <Table
                         className="report-table"
                         columns={statementColumns}
-                        dataSource={visibleFileImportJob.analysis.statements}
+                        dataSource={selectedFileImportJob.analysis.statements}
                         pagination={false}
                         rowKey="index"
                         size="small"
@@ -1195,8 +1539,90 @@ function App() {
                 )}
               </div>
 
+              {activeMenuKey === 'review' && !workbenchSnapshot && !generatePrecheck.data && (
+                <div className="panel view-panel view-active">
+                  <div className="panel-header">
+                    <Space>
+                      <AuditOutlined />
+                      <Typography.Title level={5}>审核中心</Typography.Title>
+                    </Space>
+                  </div>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="还没有可审核的快照"
+                    description="先在输入源中分析 SQL，然后保存快照并生成预处理报告。审核中心会在这里展示版本链、审核记录和 SQL 包导出。"
+                  />
+                  <Space className="review-actions">
+                    <Button onClick={() => switchView('imports')}>去输入源</Button>
+                    <Button type="primary" loading={generatePrecheck.isPending} onClick={() => generatePrecheck.mutate(manualSql)}>
+                      生成预处理报告
+                    </Button>
+                  </Space>
+                </div>
+              )}
+
+              <div id="section-rules" className={`panel wide view-panel ${isActiveView('rules', 'review') ? 'view-active' : ''}`}>
+                <div className="panel-header">
+                  <Space>
+                    <ExperimentOutlined />
+                    <Typography.Title level={5}>规则沉淀闭环</Typography.Title>
+                  </Space>
+                  <Tag color={ruleCandidateCount > 0 ? 'gold' : 'blue'}>
+                    {ruleCandidateCount > 0 ? `${ruleCandidateCount} 条待沉淀来源` : '演示链路'}
+                  </Tag>
+                </div>
+                <div className="rule-flow">
+                  {[
+                    ['1', '来源捕获', '人工编辑、AI 采纳、执行修复、校验差异'],
+                    ['2', '候选抽取', '从 SQL diff / 建议文本中提取可复用模式'],
+                    ['3', '人工审核', '确认适用条件、风险等级和自动化边界'],
+                    ['4', 'fixture 测试', '生成 input/output 样例并跑回归'],
+                    ['5', '启用命中', '规则版本化发布，重新转换同类 SQL'],
+                  ].map(([step, title, detail]) => (
+                    <div key={step} className="rule-flow-step">
+                      <span>{step}</span>
+                      <strong>{title}</strong>
+                      <small>{detail}</small>
+                    </div>
+                  ))}
+                </div>
+                <div className="rule-candidate-list">
+                  {ruleCandidates.map((candidate) => (
+                    <div key={candidate.id} className="rule-candidate">
+                      <Space className="preview-title" align="start">
+                        <Space direction="vertical" size={2}>
+                          <Typography.Text strong>{candidate.title}</Typography.Text>
+                          <Typography.Text type="secondary">{candidate.source} / {candidate.condition}</Typography.Text>
+                        </Space>
+                        <Tag color={candidate.status === 'ENABLED' ? 'green' : candidate.status === 'TEST_READY' ? 'blue' : 'gold'}>
+                          {candidate.status}
+                        </Tag>
+                      </Space>
+                      <div className="rule-impact">
+                        <Typography.Text type="secondary">{candidate.impact}</Typography.Text>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rule-actions">
+                  <Button size="small" onClick={() => switchView('workbench')}>查看人工编辑来源</Button>
+                  <Button size="small" onClick={() => switchView('ai')}>查看 AI 建议来源</Button>
+                  <Button size="small" type="primary" disabled={ruleCandidateCount === 0}>
+                    生成规则候选
+                  </Button>
+                </div>
+                <Alert
+                  className="inline-alert"
+                  type="info"
+                  showIcon
+                  message="规则不会自动生效"
+                  description="候选规则必须经过人工审核、fixture 回归测试和版本化启用，AI 只能生成草案和说明。"
+                />
+              </div>
+
               {workbenchSnapshot && (
-                <div className="panel">
+                <div id="section-review" className={`panel view-panel ${isActiveView('review') ? 'view-active' : ''}`}>
                   <div className="panel-header">
                     <Space>
                       <AuditOutlined />
@@ -1264,7 +1690,7 @@ function App() {
               )}
 
               {generatePrecheck.data && (
-                <div className="panel wide">
+                <div className={`panel wide view-panel ${isActiveView('review') ? 'view-active' : ''}`}>
                   <div className="panel-header">
                     <Space>
                       <FileSearchOutlined />
@@ -1335,24 +1761,43 @@ function App() {
                 </div>
               )}
 
-              <div className="panel wide">
+              <div className={`panel wide view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <ApiOutlined />
-                    <Typography.Title level={5}>P0 闭环流水线</Typography.Title>
+                    <Typography.Title level={5}>迁移闭环流水线</Typography.Title>
                   </Space>
-                  <Button type="primary">新建输入源</Button>
+                  <Button type="primary" onClick={() => switchView('imports')}>新建输入源</Button>
+                </div>
+                <div className="workflow-board">
+                  {workflowChecks.map((item, index) => (
+                    <button
+                      key={item.key}
+                      className={`workflow-card ${item.done ? 'workflow-card-done' : item.key === nextWorkflowCheck.key ? 'workflow-card-next' : ''}`}
+                      type="button"
+                      onClick={() => switchView(item.action)}
+                    >
+                      <span className="workflow-index">
+                        {item.done ? <CheckCircleOutlined /> : item.key === nextWorkflowCheck.key ? <ThunderboltOutlined /> : <ClockCircleOutlined />}
+                      </span>
+                      <span className="workflow-copy">
+                        <strong>{index + 1}. {item.label}</strong>
+                        <small>{item.detail}</small>
+                      </span>
+                      <ArrowRightOutlined className="workflow-arrow" />
+                    </button>
+                  ))}
                 </div>
                 <Table columns={pipelineColumns} dataSource={pipeline} pagination={false} size="middle" />
               </div>
 
-              <div className="panel">
+              <div className={`panel view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
                     <Typography.Title level={5}>迁移项目</Typography.Title>
                   </Space>
-                  <Button icon={<PlusOutlined />}>新建</Button>
+                  <Button icon={<PlusOutlined />} onClick={() => switchView('imports')}>新建</Button>
                 </div>
                 <Table
                   columns={projectColumns}
@@ -1367,7 +1812,7 @@ function App() {
                 />
               </div>
 
-              <div className="panel">
+              <div className={`panel view-panel ${isActiveView('execution') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
@@ -1445,7 +1890,7 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div id="section-ai" className={`panel view-panel ${isActiveView('ai') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <RobotOutlined />
@@ -1534,7 +1979,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="panel">
+              <div id="section-execution" className={`panel view-panel ${isActiveView('execution') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <BranchesOutlined />
@@ -1593,12 +2038,50 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div className={`panel view-panel ${isActiveView('ai') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <RobotOutlined />
                     <Typography.Title level={5}>AI 副驾驶边界</Typography.Title>
                   </Space>
+                </div>
+                <div className="ai-status-grid">
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Local LLM</Typography.Text>
+                    <Badge status={localLlmStatus.data?.reachable ? 'success' : 'error'} text={localLlmStatus.data?.reachable ? 'reachable' : 'offline'} />
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Endpoint</Typography.Text>
+                    <Typography.Text ellipsis>{localLlmStatus.data?.endpoint ?? 'unknown'}</Typography.Text>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Model</Typography.Text>
+                    <Typography.Text>{localLlmStatus.data?.model ?? 'unknown'}</Typography.Text>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Discovered</Typography.Text>
+                    <Tag>{localLlmStatus.data?.discoveredModels.length ?? 0}</Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">RAG hit rate</Typography.Text>
+                    <Tag color={(knowledgeMetrics.data?.hitRate ?? 0) > 0 ? 'green' : 'default'}>
+                      {Math.round((knowledgeMetrics.data?.hitRate ?? 0) * 100)}%
+                    </Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Fallbacks</Typography.Text>
+                    <Tag color={(localLlmStatus.data?.fallbackCount ?? 0) > 0 ? 'gold' : 'green'}>{localLlmStatus.data?.fallbackCount ?? 0}</Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Cloud provider</Typography.Text>
+                    <Tag color={cloudProviderEnabled ? 'orange' : 'green'}>{cloudProviderEnabled ? 'enabled' : 'off'}</Tag>
+                  </div>
+                  {localLlmStatus.data?.lastError && (
+                    <div className="status-line wide-status">
+                      <Typography.Text type="secondary">Last error</Typography.Text>
+                      <Typography.Text type="danger" ellipsis>{localLlmStatus.data.lastError}</Typography.Text>
+                    </div>
+                  )}
                 </div>
                 <ul className="guardrails">
                   <li>AI 只能生成建议、解释和草稿</li>

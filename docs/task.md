@@ -12,6 +12,7 @@
 - `P0`：第一条评估转换闭环必须完成。
 - `P1`：结构执行和基础数据迁移。
 - `P2`：高速迁移、复杂对象、企业化增强。
+- `P3`：生产硬化、治理、真实环境联调。
 
 闭环验收要求：
 
@@ -29,6 +30,7 @@
 - [x] `P1` 明确 Java 25 FFM 用于 COPY、LOB、文件解析等堆外缓冲控制。
 - [x] `P0` 明确预处理报告和审核为核心门禁。
 - [x] `P0` 明确 AI 作为迁移副驾驶，不直接替代规则引擎和人工审核。
+- [x] `P0` 明确本地 LLM + 本地知识库为私有化默认目标，云端 provider 仅显式启用。
 - [x] `P0` 明确资产、转换、评审、执行、校验、规则沉淀闭环。
 
 ## 3. P0：项目骨架
@@ -146,6 +148,8 @@
 - [x] `P0` 实现 `MockAiProvider`，用于无 API key 的本地开发。
 - [x] `P0` 预留云端模型 provider 配置。
 - [x] `P0` 预留本地模型 provider 配置。
+- [x] `P0` 将本地 LLM provider 标记为私有化部署优先路径。
+- [x] `P1` 实现本地 OpenAI-compatible LLM provider，并保留 mock fallback。
 - [x] `P0` 创建提示词模板版本机制。
 - [x] `P0` 实现 AI 上下文构建器。
 - [x] `P0` 实现敏感信息脱敏。
@@ -320,26 +324,26 @@
 
 ## 18. P1：Oracle 直连扫描
 
-- [ ] `P1` 扫描 schema。
-- [ ] `P1` 扫描 table。
-- [ ] `P1` 扫描 column。
-- [ ] `P1` 扫描 primary key。
-- [ ] `P1` 扫描 foreign key。
-- [ ] `P1` 扫描 unique/check constraint。
-- [ ] `P1` 扫描 index。
-- [ ] `P1` 扫描 sequence。
-- [ ] `P1` 扫描 view。
-- [ ] `P1` 扫描 trigger。
-- [ ] `P1` 扫描 function。
-- [ ] `P1` 扫描 procedure。
-- [ ] `P1` 扫描 package。
-- [ ] `P1` 扫描 synonym。
-- [ ] `P1` 扫描 comment。
-- [ ] `P1` 扫描 partition metadata。
-- [ ] `P1` 使用 `DBMS_METADATA` 获取 DDL。
-- [ ] `P1` 使用源码视图获取 PL/SQL。
-- [ ] `P1` 扫描进度实时推送。
-- [ ] `P1` 权限不足时记录风险。
+- [x] `P1` 扫描 schema。
+- [x] `P1` 扫描 table。
+- [x] `P1` 扫描 column。
+- [x] `P1` 扫描 primary key。
+- [x] `P1` 扫描 foreign key。
+- [x] `P1` 扫描 unique/check constraint。
+- [x] `P1` 扫描 index。
+- [x] `P1` 扫描 sequence。
+- [x] `P1` 扫描 view。
+- [x] `P1` 扫描 trigger。
+- [x] `P1` 扫描 function。
+- [x] `P1` 扫描 procedure。
+- [x] `P1` 扫描 package。
+- [x] `P1` 扫描 synonym。
+- [x] `P1` 扫描 comment。
+- [x] `P1` 扫描 partition metadata。
+- [x] `P1` 使用 `DBMS_METADATA` 获取 DDL。
+- [x] `P1` 使用源码视图获取 PL/SQL。
+- [x] `P1` 扫描进度实时推送。
+- [x] `P1` 权限不足时记录风险。
 
 ## 19. P1：迁移计划和 DDL 执行
 
@@ -362,8 +366,8 @@
 
 ## 20. P1：基础数据迁移
 
-- [ ] `P1` 实现 Oracle streaming reader。
-- [ ] `P1` 实现 PostgreSQL COPY writer。
+- [x] `P1` 实现 Oracle streaming reader。
+- [x] `P1` 实现 PostgreSQL COPY writer。
 - [x] `P1` 定义 `MemoryBudgetManager`。
 - [x] `P1` 定义项目级堆外内存预算。
 - [x] `P1` 定义 task 级堆外内存预算。
@@ -372,98 +376,98 @@
 - [x] `P1` 实现 FFM buffer flush 策略。
 - [x] `P1` 实现 arena close 安全检查。
 - [x] `P1` 定义 NULL 和空字符串编码策略。
-- [ ] `P1` 支持小表全量迁移。
-- [ ] `P1` 记录迁移行数。
-- [ ] `P1` 记录 rows/s。
-- [ ] `P1` 实时推送进度。
+- [x] `P1` 支持小表全量迁移。
+- [x] `P1` 记录迁移行数。
+- [x] `P1` 记录 rows/s。
+- [x] `P1` 实时推送进度。
 - [x] `P1` 记录堆外内存使用量。
 - [x] `P1` 记录 arena 未关闭数量。
 - [x] `P1` 堆外内存超限时触发限流。
-- [ ] `P1` 捕获 COPY 错误。
-- [ ] `P1` 失败重试。
-- [ ] `P1` 数据迁移失败时生成待处理问题。
-- [ ] `P1` 行数校验失败时生成待处理问题。
+- [x] `P1` 捕获 COPY 错误。
+- [x] `P1` 失败重试。
+- [x] `P1` 数据迁移失败时生成待处理问题。
+- [x] `P1` 行数校验失败时生成待处理问题。
 
 ## 21. P1：执行校验闭环回归
 
-- [ ] `P1` 准备测试 Oracle 源表和 PostgreSQL 目标库。
+- [x] `P1` 准备测试 Oracle 源表和 PostgreSQL 目标库。
 - [x] `P1` 验证已审核 SQL 基线可以生成迁移计划。
 - [x] `P1` 验证未审核 SQL 不能生成正式迁移计划。
-- [!] `P1` 验证 DDL 能执行到 PostgreSQL。
-- [ ] `P1` 验证小表 COPY 后行数一致。
+- [x] `P1` 验证 DDL 能执行到 PostgreSQL。
+- [x] `P1` 验证小表 COPY 后行数一致。
 - [x] `P1` 验证 DDL 错误能定位到对象和 SQL。
-- [ ] `P1` 验证 COPY 错误能定位到表和批次。
-- [ ] `P1` 验证校验失败能回流为待处理问题。
-- [ ] `P1` 验证 COPY 迁移时 heap 占用稳定。
-- [ ] `P1` 验证 shard 完成后 FFM arena 释放。
+- [x] `P1` 验证 COPY 错误能定位到表和批次。
+- [x] `P1` 验证校验失败能回流为待处理问题。
+- [x] `P1` 验证 COPY 迁移时 heap 占用稳定。
+- [x] `P1` 验证 shard 完成后 FFM arena 释放。
 
 ## 22. P2：高速数据迁移
 
-- [ ] `P2` 大表识别。
-- [ ] `P2` 主键 range 分片。
-- [ ] `P2` hash 分片 fallback。
-- [ ] `P2` shard checkpoint。
-- [ ] `P2` 断点续传。
-- [ ] `P2` shard 级重试。
-- [ ] `P2` 项目级并发限制。
-- [ ] `P2` 表级并发限制。
-- [ ] `P2` 全局并发限制。
-- [ ] `P2` LOB 迁移优化。
-- [ ] `P2` LOB 分块读取使用 FFM 缓冲。
-- [ ] `P2` checksum 使用 FFM 分片缓冲。
-- [ ] `P2` 迁移限速。
-- [ ] `P2` 暂停任务。
-- [ ] `P2` 取消任务。
-- [ ] `P2` 恢复任务。
+- [x] `P2` 大表识别。
+- [x] `P2` 主键 range 分片。
+- [x] `P2` hash 分片 fallback。
+- [x] `P2` shard checkpoint。
+- [x] `P2` 断点续传。
+- [x] `P2` shard 级重试。
+- [x] `P2` 项目级并发限制。
+- [x] `P2` 表级并发限制。
+- [x] `P2` 全局并发限制。
+- [x] `P2` LOB 迁移优化。
+- [x] `P2` LOB 分块读取使用 FFM 缓冲。
+- [x] `P2` checksum 使用 FFM 分片缓冲。
+- [x] `P2` 迁移限速。
+- [x] `P2` 暂停任务。
+- [x] `P2` 取消任务。
+- [x] `P2` 恢复任务。
 
 ## 23. P2：校验
 
-- [ ] `P2` 对象存在校验。
-- [ ] `P2` 行数校验。
-- [ ] `P2` 抽样校验。
-- [ ] `P2` 分片 checksum。
-- [ ] `P2` view 执行校验。
-- [ ] `P2` routine 编译校验。
-- [ ] `P2` 创建校验报告。
-- [ ] `P2` 校验失败详情。
+- [x] `P2` 对象存在校验。
+- [x] `P2` 行数校验。
+- [x] `P2` 抽样校验。
+- [x] `P2` 分片 checksum。
+- [x] `P2` view 执行校验。
+- [x] `P2` routine 编译校验。
+- [x] `P2` 创建校验报告。
+- [x] `P2` 校验失败详情。
 
 ## 24. P2：PL/SQL 增强
 
-- [ ] `P2` trigger 转换增强。
-- [ ] `P2` function 转换增强。
-- [ ] `P2` procedure 转换增强。
-- [ ] `P2` package spec 分析。
-- [ ] `P2` package body 分析。
-- [ ] `P2` package routine 拆解。
-- [ ] `P2` Oracle 内置包替代建议。
-- [ ] `P2` dynamic SQL 标注增强。
-- [ ] `P2` exception 语义差异提示。
+- [x] `P2` trigger 转换增强。
+- [x] `P2` function 转换增强。
+- [x] `P2` procedure 转换增强。
+- [x] `P2` package spec 分析。
+- [x] `P2` package body 分析。
+- [x] `P2` package routine 拆解。
+- [x] `P2` Oracle 内置包替代建议。
+- [x] `P2` dynamic SQL 标注增强。
+- [x] `P2` exception 语义差异提示。
 
 ## 25. P2：AI 增强
 
-- [ ] `P2` AI 执行错误诊断。
-- [ ] `P2` AI 校验差异排查建议。
-- [ ] `P2` AI 规则沉淀建议。
-- [ ] `P2` AI 基于历史项目推荐规则模板。
-- [ ] `P2` AI 项目级自然语言问答。
-- [ ] `P2` AI 长 PL/SQL 分块摘要。
-- [ ] `P2` AI package 改造方案生成。
-- [ ] `P2` AI 成本统计和用量看板。
-- [ ] `P2` RAG 多路召回。
-- [ ] `P2` RAG rerank。
-- [ ] `P2` 历史案例脱敏后进入全局知识库。
-- [ ] `P2` 本地 embedding 模型适配。
-- [ ] `P2` 知识库命中率和采纳率看板。
+- [x] `P2` AI 执行错误诊断。
+- [x] `P2` AI 校验差异排查建议。
+- [x] `P2` AI 规则沉淀建议。
+- [x] `P2` AI 基于历史项目推荐规则模板。
+- [x] `P2` AI 项目级自然语言问答。
+- [x] `P2` AI 长 PL/SQL 分块摘要。
+- [x] `P2` AI package 改造方案生成。
+- [x] `P2` AI 成本统计和用量看板。
+- [x] `P2` RAG 多路召回。
+- [x] `P2` RAG rerank。
+- [x] `P2` 历史案例脱敏后进入全局知识库。
+- [x] `P2` 本地 embedding 模型适配。
+- [x] `P2` 知识库命中率和采纳率看板。
 
 ## 26. P2：规则沉淀闭环
 
-- [ ] `P2` 从人工编辑 SQL 中抽取规则候选。
-- [ ] `P2` 从 AI 建议中抽取规则候选。
-- [ ] `P2` 规则候选必须人工确认。
-- [ ] `P2` 规则候选进入测试样例。
-- [ ] `P2` 规则通过测试后才能启用。
-- [ ] `P2` 规则启用后可重新转换同类 SQL。
-- [ ] `P2` 记录规则来源项目和审核人。
+- [x] `P2` 从人工编辑 SQL 中抽取规则候选。
+- [x] `P2` 从 AI 建议中抽取规则候选。
+- [x] `P2` 规则候选必须人工确认。
+- [x] `P2` 规则候选进入测试样例。
+- [x] `P2` 规则通过测试后才能启用。
+- [x] `P2` 规则启用后可重新转换同类 SQL。
+- [x] `P2` 记录规则来源项目和审核人。
 
 ## 27. 技术预研任务
 
@@ -472,25 +476,47 @@
 - [x] `P0` 验证 AI Provider 抽象。
 - [x] `P0` 验证 AI 提示词脱敏。
 - [x] `P0` 验证 AI 建议保存和审计。
-- [!] `P0` 验证 pgvector 扩展可用性。
-- [!] `P0` 验证 Spring AI PgVectorStore。
+- [x] `P0` 验证 pgvector 扩展可用性。
+- [x] `P0` 验证 Spring AI PgVectorStore。
 - [x] `P0` 验证知识 chunk metadata filter。
 - [x] `P0` 验证 embedding 前脱敏。
-- [!] `P0` 验证 Spring AI MCP Java SDK。
+- [x] `P0` 验证 Spring AI MCP Java SDK。
 - [x] `P0` 验证 MCP tool allowlist 和超时。
 - [x] `P0` 验证 Skill YAML 加载和 schema validation。
 - [x] `P0` 验证 Agent 状态机暂停、失败和审计。
-- [ ] `P1` 验证 Oracle `DBMS_METADATA` 权限和输出。
-- [ ] `P1` 验证 Oracle `ALL_SOURCE` 可访问性。
-- [ ] `P1` 验证 pgJDBC CopyManager 写入。
-- [ ] `P1` 验证 Java 25 虚拟线程和 JDBC 连接池配合。
+- [x] `P1` 验证 Oracle `DBMS_METADATA` 权限和输出。
+- [x] `P1` 验证 Oracle `ALL_SOURCE` 可访问性。
+- [x] `P1` 验证 pgJDBC CopyManager 写入。
+- [x] `P1` 验证 Java 25 虚拟线程和 JDBC 连接池配合。
 - [x] `P1` 验证 Java 25 FFM `MemorySegment` 和 `Arena` 生命周期。
-- [ ] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
+- [x] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
 - [x] `P1` 验证堆外内存预算耗尽时的限流行为。
-- [ ] `P2` 验证大表分片策略。
-- [ ] `P2` 验证 checksum 成本。
+- [x] `P2` 验证大表分片策略。
+- [x] `P2` 验证 checksum 成本。
 
-## 28. Definition of Done
+## 28. P3：生产硬化 Backlog
+
+- [x] `P3` 增加 pgvector-backed `KnowledgeRepository` 或 Spring AI PgVectorStore adapter。
+- [x] `P3` 本地 LLM 增加健康检查、模型发现、超时指标和 fallback 计数。
+- [x] `P3` 前端显示本地 LLM endpoint 健康状态、当前模型、知识库命中率和云端 provider 开关状态。
+- [x] `P3` 生产 profile 禁止使用默认元数据库密码和默认 datasource 加密 key。
+- [x] `P3` 动态 SQL 中的 table、schema、column 标识符统一走白名单或 identifier validator。
+- [x] `P3` DML/INSERT 文件导入设计专用闭环：入口、风险、产物、门禁、失败回流和验收用例。
+- [x] `P3` 增加真实 Oracle/PostgreSQL/pgvector 环境的集成测试或 CI profile。
+- [ ] `P3` FFM 堆外内存增加硬水位，达到阈值时拒绝新 shard 分配。
+- [ ] `P3` Agent 运行增加最大 step budget，超限转人工处理。
+- [ ] `P3` 将虚拟线程执行 slot 与数据源连接池容量绑定。
+- [ ] `P3` 增加连接等待、slot 等待、执行耗时指标，用于定位连接池背压瓶颈。
+- [ ] `P3` 落地 `ORACLE_EMPTY_STRING_AS_NULL` 默认策略，并接入预检展示和 COPY 编码。
+- [ ] `P3` 数据迁移校验后生成 sequence reset 步骤。
+- [ ] `P3` 迁移计划生成 Undo Script 并支持失败后 dry-run 回滚预览。
+- [ ] `P3` Oracle 扫描采集 NLS_SORT、NLS_COMP、字符集和 collation 影响。
+- [ ] `P3` 预处理报告对重复 LOW/MEDIUM 风险做聚类折叠。
+- [ ] `P3` 大型 PL/SQL/package 使用 AST outline 和风险切片进入 AI，而不是全文提示词。
+- [ ] `P3` Agent 增加 token/cost budget，超限转人工处理。
+- [ ] `P3` MCP/Skill 调用增加 retry budget、失败归因和循环等待阻断。
+
+## 29. Definition of Done
 
 一个任务完成必须满足：
 
@@ -512,7 +538,7 @@
 - 不绕过审核门禁。
 - 不丢失原始 SQL。
 
-## 29. MVP 完成标准
+## 30. MVP 完成标准
 
 MVP 完成时，用户应该可以：
 
@@ -534,4 +560,5 @@ MVP 完成时，用户应该可以：
 - 未审核或报告过期时不能导出正式 SQL 包。
 
 这才是第一版真正可用的产品闭环。
+
 

@@ -33,8 +33,40 @@
 }
 
 .content {
-  background: #f6f8fb;
-  padding: 24px;
+  background: #f5f7fb;
+  padding: 22px 24px 28px;
+}
+
+.view-title {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.view-title > .ant-btn {
+  flex: 0 0 auto;
+}
+
+.view-title h3,
+.view-title .ant-typography {
+  margin: 0;
+}
+
+.view-panel {
+  display: none;
+}
+
+.view-panel.view-active {
+  display: block;
+}
+
+.summary-band.view-active {
+  display: grid;
 }
 
 .summary-band {
@@ -44,13 +76,28 @@
   margin-bottom: 16px;
 }
 
-.summary-band h5 {
-  margin: 4px 0 0;
-}
-
-.summary-band .ant-pro-card {
+.metric-card {
+  background: #ffffff;
   border: 1px solid #eaecf0;
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-height: 122px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.metric-card-wide strong {
+  font-size: 34px;
 }
 
 .status-alert {
@@ -75,6 +122,10 @@
   min-height: 420px;
 }
 
+[id^='section-'] {
+  scroll-margin-top: 88px;
+}
+
 .panel-header {
   align-items: center;
   display: flex;
@@ -91,6 +142,111 @@
   line-height: 1.9;
   margin: 0;
   padding-left: 20px;
+}
+
+.workflow-board {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.workflow-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  min-height: 86px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.workflow-card:hover {
+  border-color: #1677ff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+  transform: translateY(-1px);
+}
+
+.workflow-card-done {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+}
+
+.workflow-card-next {
+  background: #eff6ff;
+  border-color: #91caff;
+}
+
+.workflow-index {
+  align-items: center;
+  background: #f2f4f7;
+  border-radius: 999px;
+  color: #667085;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.workflow-card-done .workflow-index {
+  background: #d9f7be;
+  color: #389e0d;
+}
+
+.workflow-card-next .workflow-index {
+  background: #d6e4ff;
+  color: #1677ff;
+}
+
+.workflow-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workflow-copy strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.workflow-copy small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workflow-arrow {
+  color: #98a2b3;
+}
+
+.ai-status-grid {
+  border-bottom: 1px solid #eaecf0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.status-line {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 110px minmax(0, 1fr);
+  min-height: 28px;
+}
+
+.wide-status {
+  grid-template-columns: 110px minmax(0, 1fr);
 }
 
 .sql-input textarea,
@@ -163,6 +319,16 @@
   padding: 8px 10px;
 }
 
+.editor-loading {
+  align-items: center;
+  background: #f8fafc;
+  color: #667085;
+  display: flex;
+  font-size: 13px;
+  height: 260px;
+  justify-content: center;
+}
+
 .risk-strip {
   display: flex;
   flex-wrap: wrap;
@@ -203,6 +369,67 @@
   margin-top: 8px;
 }
 
+.file-batch-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.file-import-list {
+  display: grid;
+  gap: 10px;
+}
+
+.file-import-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+}
+
+.file-import-row:hover,
+.file-import-row-selected {
+  border-color: #1677ff;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.06);
+}
+
+.file-import-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-import-main strong {
+  color: #101828;
+  font-size: 14px;
+}
+
+.file-import-main small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.file-import-error {
+  color: #cf1322 !important;
+}
+
+.file-import-side {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .version-summary {
   display: flex;
   flex-wrap: wrap;
@@ -210,6 +437,71 @@
 }
 
 .review-actions {
+  margin-top: 12px;
+}
+
+.rule-flow {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.rule-flow-step {
+  background: #f8fafc;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 128px;
+  padding: 12px;
+}
+
+.rule-flow-step span {
+  align-items: center;
+  background: #1677ff;
+  border-radius: 999px;
+  color: #ffffff;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.rule-flow-step strong {
+  color: #101828;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.rule-flow-step small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rule-candidate-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.rule-candidate {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.rule-impact {
+  margin-top: 8px;
+}
+
+.rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
 }
 
@@ -345,10 +637,32 @@
 @media (max-width: 960px) {
   .summary-band,
   .workspace-grid,
+  .workflow-board,
+  .rule-flow,
   .sql-preview-grid,
   .report-grid,
   .report-lists {
     grid-template-columns: 1fr;
+  }
+
+  .view-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .file-batch-toolbar,
+  .file-import-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .file-batch-toolbar {
+    flex-direction: column;
+  }
+
+  .file-import-side {
+    align-items: flex-start;
   }
 
   .topbar {

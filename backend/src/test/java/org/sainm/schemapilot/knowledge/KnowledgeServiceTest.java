@@ -4,11 +4,12 @@ import org.sainm.schemapilot.ai.SensitiveValueRedactor;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class KnowledgeServiceTest {
-    private final KnowledgeService service = new KnowledgeService(new InMemoryKnowledgeRepository(), new SensitiveValueRedactor());
+    private final KnowledgeService service = new KnowledgeService(new InMemoryKnowledgeRepository(), new SensitiveValueRedactor(), new LocalEmbeddingAdapter());
 
     @Test
     void seedsBuiltInRiskTypeAndFunctionKnowledge() {
@@ -59,5 +60,102 @@ class KnowledgeServiceTest {
                 .contains("<redacted>");
         assertThat(chunk.metadata().values()).allMatch(value -> !value.contains("secret-token"));
         assertThat(chunk.version()).isEqualTo(7);
+    }
+
+    @Test
+    void multiRecallUsesLexicalMetadataAndLocalEmbeddingThenReranks() {
+        service.seedBuiltInKnowledge();
+        service.addChunk(
+                KnowledgeDocumentType.CASE,
+                "case.nvl.account",
+                "Account NVL rewrite case",
+                "A historical project rewrote NVL to COALESCE in account views.",
+                Map.of("category", "historical-case", "riskType", "NVL"),
+                "project-a",
+                1
+        );
+
+        var response = service.multiRecall(new KnowledgeSearchRequest(
+                "account coalesce rewrite",
+                Map.of("riskType", "NVL"),
+                5
+        ));
+
+        assertThat(response.results()).isNotEmpty();
+        assertThat(response.results().getFirst().chunk().key()).isEqualTo("case.nvl.account");
+        assertThat(response.channelHits()).containsKeys("lexical", "metadata", "local-embedding");
+        assertThat(service.metrics().hitRate()).isEqualTo(1.0);
+    }
+
+    @Test
+    void storesHistoricalCaseAfterRedactionAndTracksFeedback() {
+        var chunk = service.addHistoricalCase(new HistoricalCaseRequest(
+                "case.secret",
+                "Customer case password=abc123",
+                "Fixed jdbc:oracle:thin:user/pass@db token=secret-token by replacing NVL.",
+                Map.of("riskType", "NVL", "token", "secret-token"),
+                "project-secret"
+        ));
+
+        assertThat(chunk.documentType()).isEqualTo(KnowledgeDocumentType.CASE);
+        assertThat(chunk.content())
+                .doesNotContain("user/pass@db")
+                .doesNotContain("secret-token")
+                .contains("<redacted>");
+        assertThat(chunk.metadata().get("token")).isEqualTo("<redacted>");
+
+        service.multiRecall(new KnowledgeSearchRequest("replace nvl", Map.of("riskType", "NVL"), 3));
+        var metrics = service.feedback(new KnowledgeFeedbackRequest(chunk.key(), true));
+
+        assertThat(metrics.searchCount()).isEqualTo(1);
+        assertThat(metrics.hitCount()).isEqualTo(1);
+        assertThat(metrics.acceptedCount()).isEqualTo(1);
+        assertThat(metrics.adoptionRate()).isEqualTo(1.0);
+    }
+
+    @Test
+    void localEmbeddingAdapterProducesComparableVectors() {
+        var adapter = new LocalEmbeddingAdapter();
+        var left = adapter.embed("oracle nvl coalesce rewrite");
+        var right = adapter.embed("rewrite nvl to coalesce");
+        var unrelated = adapter.embed("large object checksum migration");
+
+        assertThat(adapter.cosine(left, right)).isGreaterThan(adapter.cosine(left, unrelated));
+    }
+
+    @Test
+    void multiRecallUsesRepositoryVectorSearchWhenAvailable() {
+        var repository = new VectorAwareKnowledgeRepository();
+        var service = new KnowledgeService(repository, new SensitiveValueRedactor(), new LocalEmbeddingAdapter());
+        service.addChunk(
+                KnowledgeDocumentType.RULE,
+                "rule.vector.nvl",
+                "Vector NVL rule",
+                "NVL should be rewritten to COALESCE after type checks.",
+                Map.of("category", "function"),
+                "test",
+                1
+        );
+
+        var response = service.multiRecall(new KnowledgeSearchRequest("nvl rewrite", Map.of("category", "function"), 5));
+
+        assertThat(response.results()).isNotEmpty();
+        assertThat(response.channelHits()).containsKey("pgvector");
+        assertThat(repository.vectorSearchCount).isEqualTo(1);
+    }
+
+    private static class VectorAwareKnowledgeRepository extends InMemoryKnowledgeRepository {
+        private int vectorSearchCount;
+
+        @Override
+        public boolean supportsVectorSearch() {
+            return true;
+        }
+
+        @Override
+        public List<KnowledgeChunk> findNearestByEmbedding(float[] queryVector, Map<String, String> metadataFilters, int limit) {
+            vectorSearchCount++;
+            return findAll().stream().limit(limit).toList();
+        }
     }
 }

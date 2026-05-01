@@ -16,7 +16,7 @@ class DataSourceConfigServiceTest {
         var saved = service.create(new SaveDataSourceConfigRequest(
                 "target-pg",
                 DataSourceKind.POSTGRESQL,
-                "jdbc:postgresql://localhost:5432/schemapilot",
+                "jdbc:postgresql://localhost:5432/schemapilot?password=url-secret",
                 "schemapilot",
                 "secret-password"
         ));
@@ -24,6 +24,8 @@ class DataSourceConfigServiceTest {
         var raw = repository.findById(saved.id()).orElseThrow();
         assertThat(saved.passwordConfigured()).isTrue();
         assertThat(saved.toString()).doesNotContain("secret-password");
+        assertThat(saved.jdbcUrl()).doesNotContain("url-secret");
+        assertThat(raw.jdbcUrl()).contains("url-secret");
         assertThat(raw.encryptedPassword()).doesNotContain("secret-password");
         assertThat(cipher.decrypt(raw.encryptedPassword())).isEqualTo("secret-password");
     }

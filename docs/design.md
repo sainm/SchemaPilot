@@ -58,10 +58,10 @@ SchemaPilot 的价值不是说“我能自动迁完所有 Oracle”，而是：
 | 输入来源 | 第一版支持策略 |
 |---|---|
 | Oracle 直连 | 支持，采集元数据、对象 DDL、PL/SQL 源码 |
-| `.sql` 文件 | 支持，解析 DDL、DML、PL/SQL 块 |
+| `.sql` 文件 | 支持，解析 DDL 和 PL/SQL 块；DML/INSERT 第一版保留原文并标记为不可直接执行的待处理 SQL |
 | Data Pump SQLFILE | 支持，用户先用 `impdp SQLFILE=xxx.sql` 导出 |
 | 手工 SQL | 支持，走同一套解析和转换流程 |
-| INSERT 脚本 | 支持识别，数据执行后置 |
+| INSERT 脚本 | 第一版不自动执行；作为输入源保留原文、生成风险/待处理项，后续进入数据迁移或专用导入闭环 |
 | CSV/Excel | 第二阶段支持，用于数据导入 |
 | `.dmp` 文件 | 第一版不直接解析，提供操作向导 |
 
@@ -102,7 +102,7 @@ flowchart LR
   A1["Oracle 直连"] --> A
   A2["SQL / DDL / PL/SQL 文件"] --> A
   A3["手工 SQL"] --> A
-  A4["CSV / Excel / INSERT 文件"] --> A
+  A4["CSV / Excel / INSERT 文件（P3）"] -.-> A5["专用数据导入闭环"]
 ```
 
 ### 4.1 P0 闭环：评估转换闭环
@@ -172,6 +172,69 @@ P2 开始把项目经验沉淀成平台能力。
 ```
 
 规则沉淀必须人工确认，不能由 AI 自动写入生效规则。
+
+### 4.4 P3 闭环：DML/INSERT 文件导入闭环
+
+INSERT 脚本和 DML 文件不进入 P0/P1 的 DDL 基线执行链路，避免把数据写入和结构审核混在一起。P3 单独建立数据导入闭环：
+
+```mermaid
+flowchart LR
+  A["INSERT / DML 文件"] --> B["文件入库和 checksum"]
+  B --> C["DML 语句切分"]
+  C --> D["目标表和列 identifier validator"]
+  D --> E["数据批次预检"]
+  E --> F["导入计划草稿"]
+  F --> G["人工审核"]
+  G --> H["事务批次执行或 COPY 改写"]
+  H --> I["行数、失败行、checksum 校验"]
+  I --> J{"是否通过"}
+  J -->|通过| K["导入报告归档"]
+  J -->|失败| L["失败批次回流 work item"]
+```
+
+闭环定义：
+
+- 入口：上传 `.sql`、`.txt` 中的 `INSERT`、`UPDATE`、`DELETE`、`MERGE`，或从 Data Pump SQLFILE 中识别出的 DML 片段。
+- 风险：默认标记 `DML_REVIEW_REQUIRED`；包含函数调用、子查询、动态 SQL、未列名 INSERT、sequence/current time、LOB literal、大事务时提升风险等级。
+- 产物：`dml_import_job`、`dml_batch`、`dml_parse_issue`、`dml_preview_report`、`dml_execution_log`、失败行样本、导入校验报告。
+- 门禁：必须先完成目标结构审核和迁移计划；目标表、schema、column 必须通过 identifier validator；预检报告审核通过后才允许正式导入。
+- 执行策略：小批量可用事务分批执行；大批量 INSERT 优先解析成行集并改写为 PostgreSQL `COPY FROM STDIN`；失败批次可单独重试。
+- 失败回流：解析失败、identifier 不合法、目标列不存在、类型转换失败、唯一约束冲突、行数校验失败都必须生成 work item，不能只写日志。
+- 验收用例：普通多行 INSERT、未列名 INSERT、包含单引号和 NULL、LOB/长文本、违反约束的失败批次、审核未通过禁止执行、执行后行数一致。
+
+### 4.5 P3 闭环：架构风险硬化闭环
+
+架构风险硬化不是单点优化，而是一组必须能进入报告、门禁、执行计划和回流的生产闭环。当前先进入设计和任务清单，后续按优先级实现。
+
+```mermaid
+flowchart LR
+  A["架构风险评审"] --> B["设计约束"]
+  B --> C["计划步骤"]
+  C --> D["任务清单"]
+  D --> E["实现和测试"]
+  E --> F["预处理/执行报告"]
+  F --> G{"门禁是否通过"}
+  G -->|通过| H["归档为治理基线"]
+  G -->|失败| I["生成 work item"]
+  I --> D
+```
+
+必须纳入该闭环的风险：
+
+- 虚拟线程与连接池背压：虚拟线程不能绕过 JDBC、Oracle session、PostgreSQL COPY channel 等有限资源。
+- FFM 堆外内存：必须有项目级预算、task/shard 预算、hard watermark、arena 泄漏检测。
+- Oracle 语义：空字符串与 NULL、Sequence 游标同步、NLS/collation 差异必须进入预检。
+- AI/Agent 边界：大型 PL/SQL/package 不能全文进入 LLM；Agent 必须有 MaxSteps、token/cost budget、retry budget。
+- 报告信噪比：重复 LOW/MEDIUM 风险必须聚类折叠，BLOCKER/HIGH 置顶。
+- 回滚与逆向校验：迁移计划必须设计 forward script、undo script、dry-run rollback preview、sequence position 校验。
+
+门禁要求：
+
+- 未配置 execution slot 与连接池容量关系时，不允许开启高并发迁移。
+- FFM hard watermark 未配置时，不允许开启 LOB/大表高并发 COPY。
+- 未完成 Sequence Reset 计划时，不允许进入业务切换。
+- 未生成 Undo Script 时，不允许正式执行高风险 DDL plan。
+- 大型 PL/SQL 未完成 AST outline/slice 时，AI 只能给出风险摘要，不能生成可执行改造草案。
 
 ## 5. 状态机
 
@@ -1288,6 +1351,8 @@ try (Arena arena = Arena.ofConfined()) {
 - 所有 FFM 分配必须经过 `MemoryBudgetManager`。
 - 每个项目有堆外内存上限。
 - 每个 task / shard 有堆外内存上限。
+- 必须配置 hard watermark，默认建议为项目堆外预算的 80%。
+- 达到 hard watermark 后，新 shard 分配必须暂停或失败，并生成告警/待处理项。
 - arena 生命周期必须绑定 task / shard 生命周期。
 - 禁止把 `MemorySegment` 泄露到 task 生命周期之外。
 - PostgreSQL JDBC 边界如果需要 `byte[]`，允许在 flush 边界做小块复制，但不能让整批数据堆内驻留。
@@ -1301,6 +1366,8 @@ try (Arena arena = Arena.ofConfined()) {
 - arena 未关闭数量。
 - COPY flush 次数和平均 buffer 大小。
 - 因内存预算触发的限流次数。
+- hard watermark hit 次数。
+- 暂停新 shard 的持续时间。
 
 ## 20. Java 25 虚拟线程策略
 
@@ -1339,6 +1406,14 @@ Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
 - 在 `synchronized` 大块代码中做 JDBC I/O。
 - 无限制 `newVirtualThreadPerTaskExecutor()` 提交迁移 shard。
 - 把数据库连接池大小误认为迁移并发上限之外的东西。
+
+连接池背压要求：
+
+- 每个数据源必须有 datasource-level execution slot。
+- execution slot 默认不超过连接池容量的安全比例，并可按任务类型区分扫描、DDL、COPY、校验。
+- 虚拟线程提交任务前必须先获取 project/table/global slot，再获取 datasource slot，避免大量虚拟线程同时阻塞在连接池。
+- 持有 JDBC connection 的代码段不得执行长时间 CPU 密集任务；FFM 编码、checksum、压缩、报告渲染应尽量在连接外完成或切小块。
+- slot 等待超过阈值必须记录为执行瓶颈，不应只表现为请求超时。
 
 ## 21. 校验设计
 

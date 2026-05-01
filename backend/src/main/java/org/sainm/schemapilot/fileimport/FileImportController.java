@@ -25,9 +25,11 @@ public class FileImportController {
     @PostMapping("/sql")
     public ApiResponse<FileImportJob> uploadSql(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "relativePath", required = false) String relativePath,
             @RequestParam(value = "encoding", required = false) String encoding
     ) throws IOException {
-        return ApiResponse.ok(importService.importSqlFile(file.getOriginalFilename(), file.getBytes(), encoding));
+        var sourceName = relativePath == null || relativePath.isBlank() ? file.getOriginalFilename() : relativePath;
+        return ApiResponse.ok(importService.importSqlFile(sourceName, file.getBytes(), encoding));
     }
 
     @GetMapping("/jobs/{jobId}")

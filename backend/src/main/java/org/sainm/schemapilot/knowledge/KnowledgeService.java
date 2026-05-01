@@ -2,6 +2,7 @@ package org.sainm.schemapilot.knowledge;
 
 import jakarta.annotation.PostConstruct;
 import org.sainm.schemapilot.ai.SensitiveValueRedactor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import java.util.List;
@@ -19,10 +21,21 @@ import java.util.List;
 public class KnowledgeService {
     private final KnowledgeRepository repository;
     private final SensitiveValueRedactor redactor;
+    private final LocalEmbeddingAdapter embeddingAdapter;
+    private final AtomicLong searchCount = new AtomicLong();
+    private final AtomicLong hitCount = new AtomicLong();
+    private final AtomicLong acceptedCount = new AtomicLong();
+    private final AtomicLong rejectedCount = new AtomicLong();
 
     public KnowledgeService(KnowledgeRepository repository, SensitiveValueRedactor redactor) {
+        this(repository, redactor, new LocalEmbeddingAdapter());
+    }
+
+    @Autowired
+    public KnowledgeService(KnowledgeRepository repository, SensitiveValueRedactor redactor, LocalEmbeddingAdapter embeddingAdapter) {
         this.repository = repository;
         this.redactor = redactor;
+        this.embeddingAdapter = embeddingAdapter;
     }
 
     @PostConstruct
@@ -76,8 +89,9 @@ public class KnowledgeService {
     }
 
     public List<KnowledgeSearchResult> search(KnowledgeSearchRequest request) {
+        searchCount.incrementAndGet();
         var queryTerms = terms(request.query());
-        return repository.findAll().stream()
+        var results = repository.findAll().stream()
                 .filter(chunk -> chunk.status() == KnowledgeChunkStatus.ACTIVE || chunk.status() == KnowledgeChunkStatus.REVIEWED)
                 .filter(chunk -> metadataMatches(chunk, request.safeMetadata()))
                 .map(chunk -> new KnowledgeSearchResult(chunk, score(chunk, queryTerms), excerpt(chunk.content())))
@@ -85,6 +99,98 @@ public class KnowledgeService {
                 .sorted(Comparator.comparingInt(KnowledgeSearchResult::score).reversed())
                 .limit(request.safeLimit())
                 .toList();
+        if (!results.isEmpty()) {
+            hitCount.incrementAndGet();
+        }
+        return results;
+    }
+
+    public KnowledgeMultiRecallResponse multiRecall(KnowledgeSearchRequest request) {
+        searchCount.incrementAndGet();
+        var queryTerms = terms(request.query());
+        var queryVector = embeddingAdapter.embed(request.query());
+        var channelHits = new java.util.LinkedHashMap<String, Integer>();
+        var candidates = new java.util.LinkedHashMap<String, KnowledgeSearchResult>();
+        if (repository.supportsVectorSearch()) {
+            for (var chunk : repository.findNearestByEmbedding(queryVector, request.safeMetadata(), request.safeLimit() * 3)) {
+                var lexicalScore = score(chunk, queryTerms);
+                var metadataScore = metadataPartialScore(chunk, request.safeMetadata());
+                var vectorScore = (int) Math.round(embeddingAdapter.cosine(queryVector, embeddingAdapter.embed(chunk.title() + " " + chunk.content())) * 10);
+                channelHits.merge("pgvector", 1, Integer::sum);
+                putCandidate(candidates, chunk, lexicalScore * 3 + metadataScore * 2 + vectorScore + titleBoost(chunk, queryTerms));
+            }
+        }
+        for (var chunk : repository.findAll()) {
+            if (chunk.status() != KnowledgeChunkStatus.ACTIVE && chunk.status() != KnowledgeChunkStatus.REVIEWED) {
+                continue;
+            }
+            var lexicalScore = score(chunk, queryTerms);
+            var metadataScore = metadataPartialScore(chunk, request.safeMetadata());
+            var vectorScore = (int) Math.round(embeddingAdapter.cosine(queryVector, embeddingAdapter.embed(chunk.title() + " " + chunk.content())) * 10);
+            if (lexicalScore > 0) {
+                channelHits.merge("lexical", 1, Integer::sum);
+            }
+            if (metadataScore > 0) {
+                channelHits.merge("metadata", 1, Integer::sum);
+            }
+            if (vectorScore > 0) {
+                channelHits.merge("local-embedding", 1, Integer::sum);
+            }
+            var rerankScore = lexicalScore * 3 + metadataScore * 2 + vectorScore + titleBoost(chunk, queryTerms);
+            if (rerankScore > 0 || !request.safeMetadata().isEmpty()) {
+                putCandidate(candidates, chunk, rerankScore);
+            }
+        }
+        var results = candidates.values().stream()
+                .sorted(Comparator.comparingInt(KnowledgeSearchResult::score).reversed())
+                .limit(request.safeLimit())
+                .toList();
+        if (!results.isEmpty()) {
+            hitCount.incrementAndGet();
+        }
+        return new KnowledgeMultiRecallResponse(results, Map.copyOf(channelHits));
+    }
+
+    private void putCandidate(java.util.LinkedHashMap<String, KnowledgeSearchResult> candidates, KnowledgeChunk chunk, int score) {
+        var existing = candidates.get(chunk.key());
+        if (existing == null || score > existing.score()) {
+            candidates.put(chunk.key(), new KnowledgeSearchResult(chunk, score, excerpt(chunk.content())));
+        }
+    }
+
+    public KnowledgeChunk addHistoricalCase(HistoricalCaseRequest request) {
+        var metadata = new java.util.LinkedHashMap<String, String>();
+        if (request.metadata() != null) {
+            metadata.putAll(request.metadata());
+        }
+        metadata.put("category", "historical-case");
+        metadata.put("sourceProject", request.sourceProject() == null ? "unknown" : request.sourceProject());
+        return addChunk(KnowledgeDocumentType.CASE, request.key(), request.title(), request.content(), metadata, request.sourceProject() == null ? "historical-case" : request.sourceProject(), 1);
+    }
+
+    public KnowledgeMetrics feedback(KnowledgeFeedbackRequest request) {
+        if (request.accepted()) {
+            acceptedCount.incrementAndGet();
+        } else {
+            rejectedCount.incrementAndGet();
+        }
+        return metrics();
+    }
+
+    public KnowledgeMetrics metrics() {
+        var searches = searchCount.get();
+        var hits = hitCount.get();
+        var accepted = acceptedCount.get();
+        var rejected = rejectedCount.get();
+        var feedback = accepted + rejected;
+        return new KnowledgeMetrics(
+                searches,
+                hits,
+                accepted,
+                rejected,
+                searches == 0 ? 0 : hits / (double) searches,
+                feedback == 0 ? 0 : accepted / (double) feedback
+        );
     }
 
     private void addBuiltIn(String key, String title, String content, Map<String, String> metadata) {
@@ -120,6 +226,28 @@ public class KnowledgeService {
             }
         }
         return true;
+    }
+
+    private int metadataPartialScore(KnowledgeChunk chunk, Map<String, String> filters) {
+        var score = 0;
+        for (var entry : filters.entrySet()) {
+            var value = chunk.metadata().get(entry.getKey());
+            if (value != null && value.equalsIgnoreCase(entry.getValue())) {
+                score++;
+            }
+        }
+        return score;
+    }
+
+    private int titleBoost(KnowledgeChunk chunk, Set<String> queryTerms) {
+        var titleTerms = terms(chunk.title());
+        var boost = 0;
+        for (var term : queryTerms) {
+            if (titleTerms.contains(term)) {
+                boost += 2;
+            }
+        }
+        return boost;
     }
 
     private Set<String> terms(String value) {

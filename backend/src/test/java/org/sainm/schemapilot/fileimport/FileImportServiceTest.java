@@ -8,7 +8,11 @@ import org.sainm.schemapilot.sql.SqlRiskDetector;
 import org.sainm.schemapilot.sql.SqlStatementSplitter;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,6 +84,63 @@ class FileImportServiceTest {
 
         assertThat(completed.analysis().statements().getFirst().objectName()).isEqualTo("users");
         assertThat(completed.analysis().statements().getFirst().parseIssues()).isEmpty();
+    }
+
+    @Test
+    void combinesCompletedFileImportJobsIntoOneSourceBatch() throws Exception {
+        var tableJob = awaitCompleted(service.importSqlFile(
+                "tables.sql",
+                "CREATE TABLE users (id NUMBER);".getBytes(StandardCharsets.UTF_8),
+                null
+        ));
+        var viewJob = awaitCompleted(service.importSqlFile(
+                "views.sql",
+                "CREATE VIEW active_users AS SELECT id FROM users;".getBytes(StandardCharsets.UTF_8),
+                null
+        ));
+
+        var combined = service.combinedSourceSql(List.of(tableJob.id(), viewJob.id()));
+
+        assertThat(combined).contains("-- source file: tables.sql");
+        assertThat(combined).contains("-- source file: views.sql");
+        assertThat(combined).contains("CREATE TABLE users");
+        assertThat(combined).contains("CREATE VIEW active_users");
+        assertThat(service.sourceFileSummary(List.of(tableJob.id(), viewJob.id()))).isEqualTo("tables.sql, views.sql");
+    }
+
+    @Test
+    void importsZipProjectPackageWithRelativeSqlPaths() throws Exception {
+        var completed = awaitCompleted(service.importSqlFile(
+                "oracle-project.zip",
+                zip(
+                        "schema/tables.sql", "CREATE TABLE users (id NUMBER);",
+                        "schema/views/active_users.sql", "CREATE VIEW active_users AS SELECT id FROM users;",
+                        "README.md", "ignored"
+                ),
+                "UTF-8"
+        ));
+
+        assertThat(completed.status()).isEqualTo(FileImportStatus.COMPLETED);
+        assertThat(completed.analysis().statementCount()).isEqualTo(2);
+        assertThat(service.sourceSql(completed.id())).contains("-- source file: schema/tables.sql");
+        assertThat(service.sourceSql(completed.id())).contains("-- source file: schema/views/active_users.sql");
+        assertThat(service.sourceSql(completed.id())).doesNotContain("ignored");
+    }
+
+    private byte[] zip(String firstName, String firstContent, String secondName, String secondContent, String thirdName, String thirdContent) throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        try (var zip = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
+            addZipEntry(zip, firstName, firstContent);
+            addZipEntry(zip, secondName, secondContent);
+            addZipEntry(zip, thirdName, thirdContent);
+        }
+        return bytes.toByteArray();
+    }
+
+    private void addZipEntry(ZipOutputStream zip, String name, String content) throws Exception {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
     }
 
     private FileImportJob awaitCompleted(FileImportJob job) throws InterruptedException {

@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 public class OracleToPostgresConverter implements ObjectConverter {
     private static final Pattern NUMBER_WITH_SCALE = Pattern.compile("(?i)\\bNUMBER\\s*\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
     private static final Pattern NUMBER_WITH_PRECISION = Pattern.compile("(?i)\\bNUMBER\\s*\\(\\s*(\\d+)\\s*\\)");
+    private final PlsqlRewriteAdvisor plsqlRewriteAdvisor = new PlsqlRewriteAdvisor();
 
     @Override
     public boolean supports(ObjectType objectType) {
@@ -20,13 +21,13 @@ public class OracleToPostgresConverter implements ObjectConverter {
     public ConversionDraft convert(ConversionContext context) {
         var sql = context.originalSql();
         if (context.objectType() == ObjectType.TRIGGER) {
-            return new ConversionDraft(triggerDraft(context.objectName(), sql), ConversionLevel.DRAFT);
+            return new ConversionDraft(plsqlRewriteAdvisor.triggerDraft(context.objectName(), sql), ConversionLevel.DRAFT);
         }
         if (context.objectType() == ObjectType.FUNCTION || context.objectType() == ObjectType.PROCEDURE) {
-            return new ConversionDraft(routineDraft(context.objectName(), sql), ConversionLevel.DRAFT);
+            return new ConversionDraft(plsqlRewriteAdvisor.routineDraft(context.objectName(), sql), ConversionLevel.DRAFT);
         }
         if (context.objectType() == ObjectType.PACKAGE || context.objectType() == ObjectType.PACKAGE_BODY) {
-            return new ConversionDraft(packageDraft(context.objectName(), sql), ConversionLevel.MANUAL_REQUIRED);
+            return new ConversionDraft(plsqlRewriteAdvisor.packageDraft(context.objectName(), sql), ConversionLevel.MANUAL_REQUIRED);
         }
 
         var converted = stripSqlPlusTerminator(sql);
@@ -70,36 +71,6 @@ public class OracleToPostgresConverter implements ObjectConverter {
             }
             return "numeric(" + precision + ")";
         }).replaceAll("(?i)\\bNUMBER\\b", "numeric");
-    }
-
-    private String triggerDraft(String objectName, String sql) {
-        return """
-                -- DRAFT: Oracle trigger %s requires a PostgreSQL trigger function plus trigger binding.
-                -- Original Oracle trigger:
-                /*
-                %s
-                */
-                """.formatted(objectName, stripSqlPlusTerminator(sql));
-    }
-
-    private String routineDraft(String objectName, String sql) {
-        return """
-                -- DRAFT: Oracle routine %s requires PL/pgSQL review.
-                -- Original Oracle routine:
-                /*
-                %s
-                */
-                """.formatted(objectName, stripSqlPlusTerminator(sql));
-    }
-
-    private String packageDraft(String objectName, String sql) {
-        return """
-                -- MANUAL_REQUIRED: Oracle package %s should be split into PostgreSQL functions/procedures and reviewed.
-                -- Original package source:
-                /*
-                %s
-                */
-                """.formatted(objectName, stripSqlPlusTerminator(sql));
     }
 
     private String stripSqlPlusTerminator(String sql) {

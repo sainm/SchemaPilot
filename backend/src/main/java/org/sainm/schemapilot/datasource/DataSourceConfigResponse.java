@@ -19,12 +19,22 @@ public record DataSourceConfigResponse(
                 config.id(),
                 config.name(),
                 config.kind(),
-                config.jdbcUrl(),
+                sanitizeJdbcUrl(config.jdbcUrl()),
                 config.username(),
                 config.encryptedPassword() != null && !config.encryptedPassword().isBlank(),
                 config.status(),
                 config.createdAt(),
                 config.updatedAt()
         );
+    }
+
+    private static String sanitizeJdbcUrl(String jdbcUrl) {
+        if (jdbcUrl == null) {
+            return "";
+        }
+        return jdbcUrl
+                .replaceAll("(?i)(password=)[^;&]+", "$1<redacted>")
+                .replaceAll("(?i)(pwd=)[^;&]+", "$1<redacted>")
+                .replaceAll("(?i)(sslpassword=)[^;&]+", "$1<redacted>");
     }
 }

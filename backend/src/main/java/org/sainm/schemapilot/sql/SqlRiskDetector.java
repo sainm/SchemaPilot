@@ -16,6 +16,7 @@ public class SqlRiskDetector {
     private static final Pattern PACKAGE_GLOBAL = Pattern.compile(
             "(?im)^\\s*(?!procedure\\b|function\\b|type\\b|subtype\\b|cursor\\b)([a-z][\\w$#]*)\\s+(constant\\s+)?(number|varchar2|nvarchar2|date|boolean|clob|blob|raw)\\b"
     );
+    private final PlsqlRewriteAdvisor plsqlRewriteAdvisor = new PlsqlRewriteAdvisor();
 
     List<DetectedRisk> detect(ClassifiedStatement statement, String sql) {
         var risks = new ArrayList<DetectedRisk>();
@@ -76,7 +77,8 @@ public class SqlRiskDetector {
             risks.add(new DetectedRisk("ORACLE_HINT", RiskLevel.MEDIUM, "Oracle optimizer hint was detected.", "Remove or replace with PostgreSQL tuning strategy."));
         }
         if (contains(sql, "\\bEXECUTE\\s+IMMEDIATE\\b")) {
-            risks.add(new DetectedRisk("DYNAMIC_SQL", RiskLevel.HIGH, "Oracle dynamic SQL cannot be safely converted by static rules alone.", "Extract generated SQL patterns and review bind variable behavior manually."));
+            risks.add(new DetectedRisk("DYNAMIC_SQL", RiskLevel.HIGH, "Oracle dynamic SQL cannot be safely converted by static rules alone.", "Extract generated SQL patterns and route schema/table/column names through an identifier validator before execution."));
+            risks.add(new DetectedRisk("DYNAMIC_SQL_BINDING", RiskLevel.HIGH, "Oracle EXECUTE IMMEDIATE bind semantics can differ from PL/pgSQL EXECUTE.", "Rewrite with EXECUTE format(...) USING ... and keep identifiers allowlisted separately from values."));
         }
         if (contains(sql, "\\bPRAGMA\\s+AUTONOMOUS_TRANSACTION\\b")) {
             risks.add(new DetectedRisk(
@@ -95,10 +97,44 @@ public class SqlRiskDetector {
                     RiskLevel.HIGH,
                     "Anonymous Oracle PL/SQL block cannot be executed directly as a PostgreSQL schema object.",
                     "Convert it into a reviewed migration step or an explicit PostgreSQL function/procedure draft."
+                ));
+        }
+        var builtinSuggestions = plsqlRewriteAdvisor.builtinPackageSuggestions(sql);
+        if (!builtinSuggestions.isEmpty()) {
+            risks.add(new DetectedRisk(
+                    "ORACLE_BUILTIN_PACKAGE",
+                    RiskLevel.HIGH,
+                    "Oracle built-in package usage was detected: " + String.join("; ", builtinSuggestions),
+                    "Replace each package call with a reviewed PostgreSQL, extension, or external-service equivalent."
+            ));
+        }
+        if (contains(sql, "\\bEXCEPTION\\b|\\bNO_DATA_FOUND\\b|\\bTOO_MANY_ROWS\\b|\\bSQLCODE\\b|\\bSQLERRM\\b|\\bWHEN\\s+OTHERS\\b")) {
+            risks.add(new DetectedRisk(
+                    "EXCEPTION_SEMANTICS",
+                    RiskLevel.MEDIUM,
+                    "Oracle exception names, SQLCODE/SQLERRM behavior, and WHEN OTHERS handling need PostgreSQL review.",
+                    "Map exceptions to PL/pgSQL condition names and decide whether to rethrow, translate, or log."
+            ));
+        }
+        if (statement.objectType() == ObjectType.FUNCTION || statement.objectType() == ObjectType.PROCEDURE) {
+            risks.add(new DetectedRisk(
+                    "PLSQL_ROUTINE_DRAFT",
+                    RiskLevel.HIGH,
+                    "Oracle routine was converted to a PL/pgSQL skeleton and requires semantic review.",
+                    "Review parameters, return type, DML behavior, dynamic SQL, exceptions, and transaction assumptions."
             ));
         }
         if (statement.objectType() == ObjectType.PACKAGE || statement.objectType() == ObjectType.PACKAGE_BODY) {
             risks.add(new DetectedRisk("PACKAGE", RiskLevel.BLOCKER, "Oracle package cannot be automatically migrated as a single PostgreSQL object.", "Split package routines and review global state."));
+            var routines = plsqlRewriteAdvisor.packageRoutines(sql);
+            if (!routines.isEmpty()) {
+                risks.add(new DetectedRisk(
+                        "PACKAGE_ROUTINE_DECOMPOSITION",
+                        RiskLevel.HIGH,
+                        "Oracle package routines must be decomposed: " + String.join(", ", routines),
+                        "Convert stateless routines to standalone PostgreSQL functions/procedures and handle shared state explicitly."
+                ));
+            }
             if (PACKAGE_GLOBAL.matcher(sql).find()) {
                 risks.add(new DetectedRisk(
                         "PACKAGE_GLOBAL_STATE",

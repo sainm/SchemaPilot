@@ -6,19 +6,25 @@ import org.sainm.schemapilot.sql.ManualSqlAnalysisService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class FileImportService {
@@ -78,7 +84,10 @@ public class FileImportService {
     private void parse(UUID jobId, byte[] content, Charset charset) {
         try {
             update(jobId, FileImportStatus.PARSING, 25, null, null);
-            var sql = new String(content, charset);
+            var job = getJob(jobId);
+            var sql = isZip(job.fileName(), content)
+                    ? unzipSqlSources(content, charset)
+                    : new String(content, charset);
             sourceSqlByJob.put(jobId, sql);
             update(jobId, FileImportStatus.PARSING, 60, null, null);
             var analysis = analysisService.analyze(sql);
@@ -98,6 +107,76 @@ public class FileImportService {
             throw new NotFoundException("Original SQL not found for file import job: " + jobId);
         }
         return sql;
+    }
+
+    public String combinedSourceSql(List<UUID> jobIds) {
+        var uniqueJobIds = validateBatchJobIds(jobIds);
+        return uniqueJobIds.stream()
+                .map(jobId -> "-- source file: " + safeSqlComment(getJob(jobId).fileName()) + "\n" + sourceSql(jobId))
+                .collect(Collectors.joining("\n\n"));
+    }
+
+    public String sourceFileSummary(List<UUID> jobIds) {
+        var uniqueJobIds = validateBatchJobIds(jobIds);
+        return uniqueJobIds.stream()
+                .map(jobId -> safeSqlComment(getJob(jobId).fileName()))
+                .collect(Collectors.joining(", "));
+    }
+
+    private LinkedHashSet<UUID> validateBatchJobIds(List<UUID> jobIds) {
+        if (jobIds == null || jobIds.isEmpty()) {
+            throw new BadRequestException("At least one file import job is required.");
+        }
+        var uniqueJobIds = new LinkedHashSet<>(jobIds);
+        if (uniqueJobIds.size() != jobIds.size()) {
+            throw new BadRequestException("Duplicate file import jobs are not allowed in one batch.");
+        }
+        return uniqueJobIds;
+    }
+
+    private String safeSqlComment(String value) {
+        return (value == null || value.isBlank() ? "uploaded.sql" : value)
+                .replaceAll("[\\r\\n]+", " ")
+                .replace("*/", "* /");
+    }
+
+    private boolean isZip(String fileName, byte[] content) {
+        return (fileName != null && fileName.toLowerCase().endsWith(".zip"))
+                || (content.length >= 4
+                && content[0] == 0x50
+                && content[1] == 0x4b
+                && content[2] == 0x03
+                && content[3] == 0x04);
+    }
+
+    private String unzipSqlSources(byte[] content, Charset charset) throws IOException {
+        var sources = new ArrayList<String>();
+        try (var zip = new ZipInputStream(new ByteArrayInputStream(content), charset)) {
+            var entry = zip.getNextEntry();
+            while (entry != null) {
+                if (!entry.isDirectory() && isSqlLike(entry.getName())) {
+                    var bytes = readEntry(zip);
+                    sources.add("-- source file: " + safeSqlComment(entry.getName()) + "\n" + new String(bytes, charset));
+                }
+                zip.closeEntry();
+                entry = zip.getNextEntry();
+            }
+        }
+        if (sources.isEmpty()) {
+            throw new BadRequestException("ZIP package does not contain .sql or .txt files.");
+        }
+        return String.join("\n\n", sources);
+    }
+
+    private boolean isSqlLike(String entryName) {
+        var normalized = entryName.toLowerCase();
+        return normalized.endsWith(".sql") || normalized.endsWith(".txt");
+    }
+
+    private byte[] readEntry(ZipInputStream zip) throws IOException {
+        var output = new ByteArrayOutputStream();
+        zip.transferTo(output);
+        return output.toByteArray();
     }
 
     private void update(UUID jobId, FileImportStatus status, int progressPercent, org.sainm.schemapilot.sql.SqlAnalysisResponse analysis, String error) {
