@@ -98,6 +98,7 @@
 - 迁移模板。
 - 规则市场。
 - 审计报表。
+- 架构风险硬化：连接池背压、FFM hard watermark、Sequence Reset、Undo Script、NLS/collation、Agent budget、风险聚类。
 
 ## 2.1 闭环里程碑矩阵
 
@@ -108,6 +109,7 @@
 | P2 | 高速恢复闭环 | 大表迁移任务 | shard checkpoint、失败重试、checksum | 失败 shard 必须处理或豁免 | 人为中断后恢复并校验通过 |
 | P2 | 规则沉淀闭环 | 人工修正 SQL、AI 建议 | 新规则草案、规则测试结果 | 人工确认后规则才生效 | 同类 SQL 再次导入能自动命中 |
 | P3 | 治理闭环 | 多项目、多角色 | 审批流、审计报表、模板 | 权限和审批策略 | 不同角色完成协作验收 |
+| P3 | 架构风险硬化闭环 | 架构风险评审、执行指标 | 背压策略、内存水位、Undo Script、Sequence Reset、NLS 报告、Agent budget | 高风险能力未配置不得执行 | 压测、失败演练、回滚预览、报告门禁 |
 
 ## 3. 第一条垂直切片
 
@@ -536,6 +538,116 @@ gantt
 - 并发参数面板。
 - package 分析增强。
 - trigger/function/procedure 草稿增强。
+
+## 8.5 P3 架构风险硬化步骤
+
+这些任务来自架构风险评审，先进入计划，不在当前轮直接编码。
+
+### Step 1：虚拟线程与连接池背压
+
+目标：
+
+- 建立 datasource-level execution slot。
+- 将扫描、DDL、COPY、校验、Sequence Reset、Undo Script 的并发上限与连接池容量绑定。
+
+产物：
+
+- 数据源并发配置。
+- slot 等待指标。
+- 连接池等待时间报告。
+- 高并发迁移门禁规则。
+
+验收：
+
+- 当虚拟线程任务数远大于连接池容量时，任务应排队在 execution slot，而不是堆积在 JDBC 连接池。
+
+### Step 2：FFM 堆外内存 hard watermark
+
+目标：
+
+- 在 `MemoryBudgetManager` 中增加 hard watermark。
+- 达到阈值时暂停新 shard 或拒绝新堆外分配。
+
+产物：
+
+- hard watermark 配置。
+- watermark hit 指标。
+- arena 泄漏检测报告。
+
+验收：
+
+- LOB/大表高并发迁移触达水位时，新 shard 不再启动，并产生可见告警。
+
+### Step 3：Oracle 语义补齐
+
+目标：
+
+- 增加空字符串与 NULL 策略。
+- 生成 Sequence Reset 步骤。
+- 采集 Oracle NLS/collation 参数。
+
+产物：
+
+- 项目级语义配置。
+- Sequence Reset plan step。
+- NLS/collation 预检报告。
+
+验收：
+
+- 数据迁移完成后，sequence position 不落后于目标表最大键值。
+- 字符排序差异能在报告中被识别。
+
+### Step 4：AI 与 Agent 预算边界
+
+目标：
+
+- 大型 PL/SQL/package 先解析 AST outline，再选择风险切片进入 AI。
+- Agent 增加 MaxSteps、token/cost budget、tool retry budget。
+
+产物：
+
+- PL/SQL outline。
+- 风险切片 prompt context。
+- Agent budget report。
+
+验收：
+
+- 超长 package 不会全文发送给 LLM。
+- Agent 超限后转为人工处理，不进入循环重试。
+
+### Step 5：报告信噪比
+
+目标：
+
+- 对重复 LOW/MEDIUM 风险聚类折叠。
+- BLOCKER/HIGH 风险置顶。
+
+产物：
+
+- 风险聚类摘要。
+- 可展开风险明细。
+
+验收：
+
+- 几千对象项目中，同类 `NUMBER` 精度风险不会刷屏，DBA 可优先看到 blocker。
+
+### Step 6：回滚与逆向校验
+
+目标：
+
+- 每个迁移计划生成 forward script 和 undo script。
+- DDL 失败时提供 dry-run rollback preview。
+- 校验报告增加 sequence position、对象存在、行数、checksum、view/routine 校验。
+
+产物：
+
+- Undo Script。
+- Rollback preview。
+- Reverse validation report。
+
+验收：
+
+- DDL 执行到一半失败时，可以查看将要清理的对象和 SQL，且正式回滚需要审核门禁。
 
 ## 9. 关键验收标准
 

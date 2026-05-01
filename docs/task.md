@@ -503,6 +503,15 @@
 - [x] `P3` 动态 SQL 中的 table、schema、column 标识符统一走白名单或 identifier validator。
 - [x] `P3` DML/INSERT 文件导入设计专用闭环：入口、风险、产物、门禁、失败回流和验收用例。
 - [x] `P3` 增加真实 Oracle/PostgreSQL/pgvector 环境的集成测试或 CI profile。
+- [ ] `P3` FFM 堆外内存增加硬水位，达到阈值时拒绝新 shard 分配。
+- [ ] `P3` Agent 运行增加最大 step budget，超限转人工处理。
+- [ ] `P3` 将虚拟线程执行 slot 与数据源连接池容量绑定。
+- [ ] `P3` 数据迁移校验后生成 sequence reset 步骤。
+- [ ] `P3` 迁移计划生成 Undo Script 并支持失败后 dry-run 回滚预览。
+- [ ] `P3` Oracle 扫描采集 NLS_SORT、NLS_COMP、字符集和 collation 影响。
+- [ ] `P3` 预处理报告对重复 LOW/MEDIUM 风险做聚类折叠。
+- [ ] `P3` 大型 PL/SQL/package 使用 AST outline 和风险切片进入 AI，而不是全文提示词。
+- [ ] `P3` Agent 增加 token/cost budget，超限转人工处理。
 
 ## 29. Definition of Done
 
