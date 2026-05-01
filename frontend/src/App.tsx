@@ -731,7 +731,10 @@ function useUploadSqlFile() {
   return useMutation({
     mutationFn: async (file: File) => {
       const body = new FormData()
+      const uploadFile = file as File & { webkitRelativePath?: string }
+      const relativePath = uploadFile.webkitRelativePath || uploadFile.name
       body.append('file', file)
+      body.append('relativePath', relativePath)
       body.append('encoding', 'UTF-8')
       const response = await axios.post<ApiResponse<FileImportJob>>('/api/file-import/sql', body)
       return response.data.data
@@ -1421,24 +1424,43 @@ function App() {
                 <div className="panel-header">
                   <Space>
                     <CloudUploadOutlined />
-                    <Typography.Title level={5}>SQL 文件批次导入</Typography.Title>
+                    <Typography.Title level={5}>输入源批次导入</Typography.Title>
                   </Space>
-                  <Upload
-                    accept=".sql,.txt"
-                    multiple
-                    showUploadList={false}
-                    beforeUpload={(file) => {
-                      uploadSqlFile.mutate(file as File, {
-                        onSuccess: (job) => {
-                          setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
-                          setSelectedFileImportJobId(job.id)
-                        },
-                      })
-                      return false
-                    }}
-                  >
-                    <Button loading={uploadSqlFile.isPending}>上传多个文件</Button>
-                  </Upload>
+                  <Space wrap>
+                    <Upload
+                      accept=".sql,.txt,.zip"
+                      multiple
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        uploadSqlFile.mutate(file as File, {
+                          onSuccess: (job) => {
+                            setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+                            setSelectedFileImportJobId(job.id)
+                          },
+                        })
+                        return false
+                      }}
+                    >
+                      <Button loading={uploadSqlFile.isPending}>上传文件 / zip</Button>
+                    </Upload>
+                    <Upload
+                      accept=".sql,.txt"
+                      directory
+                      multiple
+                      showUploadList={false}
+                      beforeUpload={(file) => {
+                        uploadSqlFile.mutate(file as File, {
+                          onSuccess: (job) => {
+                            setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+                            setSelectedFileImportJobId(job.id)
+                          },
+                        })
+                        return false
+                      }}
+                    >
+                      <Button loading={uploadSqlFile.isPending}>选择文件夹 / 工程</Button>
+                    </Upload>
+                  </Space>
                 </div>
                 {uploadSqlFile.isError && (
                   <Alert className="inline-alert" type="error" showIcon message="文件上传失败" description={String(uploadSqlFile.error)} />
@@ -1448,8 +1470,8 @@ function App() {
                     className="inline-alert"
                     type="info"
                     showIcon
-                    message="可以一次选择多个 SQL 文件"
-                    description="每个文件会独立解析、记录 checksum 和进度；完成后可以单独保存快照，也可以把多个完成文件合并为一个输入源批次。"
+                    message="可以导入文件、文件夹、工程目录或 zip 包"
+                    description="文件夹会保留相对路径；zip 包会在后端展开并提取 .sql/.txt；每个来源都会记录 checksum、进度和对象清单。"
                   />
                 )}
                 {visibleFileImportJobs.length > 0 && (
