@@ -77,8 +77,8 @@ public class SqlRiskDetector {
             risks.add(new DetectedRisk("ORACLE_HINT", RiskLevel.MEDIUM, "Oracle optimizer hint was detected.", "Remove or replace with PostgreSQL tuning strategy."));
         }
         if (contains(sql, "\\bEXECUTE\\s+IMMEDIATE\\b")) {
-            risks.add(new DetectedRisk("DYNAMIC_SQL", RiskLevel.HIGH, "Oracle dynamic SQL cannot be safely converted by static rules alone.", "Extract generated SQL patterns and review bind variable behavior manually."));
-            risks.add(new DetectedRisk("DYNAMIC_SQL_BINDING", RiskLevel.HIGH, "Oracle EXECUTE IMMEDIATE bind semantics can differ from PL/pgSQL EXECUTE.", "Rewrite with EXECUTE format(...) USING ... and verify identifier/value quoting."));
+            risks.add(new DetectedRisk("DYNAMIC_SQL", RiskLevel.HIGH, "Oracle dynamic SQL cannot be safely converted by static rules alone.", "Extract generated SQL patterns and route schema/table/column names through an identifier validator before execution."));
+            risks.add(new DetectedRisk("DYNAMIC_SQL_BINDING", RiskLevel.HIGH, "Oracle EXECUTE IMMEDIATE bind semantics can differ from PL/pgSQL EXECUTE.", "Rewrite with EXECUTE format(...) USING ... and keep identifiers allowlisted separately from values."));
         }
         if (contains(sql, "\\bPRAGMA\\s+AUTONOMOUS_TRANSACTION\\b")) {
             risks.add(new DetectedRisk(

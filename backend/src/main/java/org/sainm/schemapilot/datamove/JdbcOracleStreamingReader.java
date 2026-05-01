@@ -1,6 +1,7 @@
 package org.sainm.schemapilot.datamove;
 
 import org.sainm.schemapilot.datasource.DataSourceConfigService;
+import org.sainm.schemapilot.sql.SqlIdentifierValidator;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -12,10 +13,12 @@ import java.util.stream.Collectors;
 public class JdbcOracleStreamingReader implements OracleStreamingReader {
     private final DataSourceConfigService dataSourceConfigService;
     private final OracleLobValueReader lobValueReader;
+    private final SqlIdentifierValidator identifierValidator;
 
-    public JdbcOracleStreamingReader(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager) {
+    public JdbcOracleStreamingReader(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager, SqlIdentifierValidator identifierValidator) {
         this.dataSourceConfigService = dataSourceConfigService;
         this.lobValueReader = new OracleLobValueReader(memoryBudgetManager);
+        this.identifierValidator = identifierValidator;
     }
 
     @Override
@@ -32,7 +35,7 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
     public long estimateRows(UUID sourceDataSourceId, String sourceTable) {
         try (var connection = dataSourceConfigService.openConnection(sourceDataSourceId);
              var statement = connection.createStatement();
-             var resultSet = statement.executeQuery("select count(*) from " + sourceTable)) {
+             var resultSet = statement.executeQuery("select count(*) from " + identifierValidator.quoteQualified(sourceTable))) {
             return resultSet.next() ? resultSet.getLong(1) : -1;
         } catch (Exception ex) {
             throw new DataMoveException("Oracle row estimate failed for " + sourceTable + ": " + ex.getMessage(), ex);
@@ -41,7 +44,7 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
 
     @Override
     public NumericBounds numericBounds(UUID sourceDataSourceId, String sourceTable, String shardColumn) {
-        var sql = "select min(" + quote(shardColumn) + "), max(" + quote(shardColumn) + ") from " + sourceTable;
+        var sql = "select min(" + identifierValidator.quote(shardColumn) + "), max(" + identifierValidator.quote(shardColumn) + ") from " + identifierValidator.quoteQualified(sourceTable);
         try (var connection = dataSourceConfigService.openConnection(sourceDataSourceId);
              var statement = connection.createStatement();
              var resultSet = statement.executeQuery(sql)) {
@@ -60,7 +63,7 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
     }
 
     private long streamSql(UUID sourceDataSourceId, String sourceTable, List<String> columns, String predicate, Consumer<TableRow> rowConsumer) {
-        var sql = "select " + columns.stream().map(this::quote).collect(Collectors.joining(", ")) + " from " + sourceTable;
+        var sql = "select " + columns.stream().map(identifierValidator::quote).collect(Collectors.joining(", ")) + " from " + identifierValidator.quoteQualified(sourceTable);
         if (predicate != null && !predicate.isBlank()) {
             sql += " where " + predicate;
         }
@@ -84,7 +87,4 @@ public class JdbcOracleStreamingReader implements OracleStreamingReader {
         }
     }
 
-    private String quote(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
-    }
 }

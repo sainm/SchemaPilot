@@ -90,4 +90,12 @@ public class AiController {
     public ApiResponse<AiUsageStats> usageStats() {
         return ApiResponse.ok(aiProvider.usageStats());
     }
+
+    @GetMapping("/local-status")
+    public ApiResponse<LocalLlmStatus> localStatus() {
+        if (aiProvider instanceof LocalFirstAiProvider localFirstAiProvider) {
+            return ApiResponse.ok(localFirstAiProvider.localStatus());
+        }
+        return ApiResponse.ok(new LocalLlmStatus(false, "unavailable", "unavailable", false, List.of(), 0, 0, 0, 0, 0, "LOCAL_PROVIDER_NOT_ACTIVE"));
+    }
 }

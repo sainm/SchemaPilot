@@ -29,6 +29,7 @@ class LocalFirstAiProvider implements AiProvider {
     private final KnowledgeService knowledgeService;
     private final AiGovernanceRegistry governanceRegistry;
     private final AtomicLong localRequestCount = new AtomicLong();
+    private final AtomicLong localFallbackCount = new AtomicLong();
     private final AtomicLong estimatedLocalInputTokens = new AtomicLong();
     private final AtomicLong estimatedLocalOutputTokens = new AtomicLong();
     private final ConcurrentHashMap<String, AtomicLong> localPromptCounts = new ConcurrentHashMap<>();
@@ -202,6 +203,10 @@ class LocalFirstAiProvider implements AiProvider {
         );
     }
 
+    public LocalLlmStatus localStatus() {
+        return localLlmClient.status(localFallbackCount.get());
+    }
+
     private AiSuggestionDraft localOrFallback(
             String promptKey,
             String task,
@@ -220,19 +225,21 @@ class LocalFirstAiProvider implements AiProvider {
                 citedLocalKnowledge:
                 %s
                 """.formatted(promptKey, task, context, localKnowledge(chunks)).strip();
-        return localLlmClient.complete(SYSTEM_PROMPT, userPrompt)
-                .map(suggestion -> {
-                    recordLocalUsage(promptKey, userPrompt, suggestion);
-                    return new AiSuggestionDraft(
-                            "local-openai-compatible",
-                            localLlmClient.model(),
-                            governanceRegistry.activePromptVersion(promptKey),
-                            suggestion,
-                            List.of(context),
-                            citedChunkKeys
-                    );
-                })
-                .orElseGet(fallbackSupplier);
+        var localCompletion = localLlmClient.complete(SYSTEM_PROMPT, userPrompt);
+        if (localCompletion.isPresent()) {
+            var suggestion = localCompletion.get();
+            recordLocalUsage(promptKey, userPrompt, suggestion);
+            return new AiSuggestionDraft(
+                    "local-openai-compatible",
+                    localLlmClient.model(),
+                    governanceRegistry.activePromptVersion(promptKey),
+                    suggestion,
+                    List.of(context),
+                    citedChunkKeys
+            );
+        }
+        localFallbackCount.incrementAndGet();
+        return fallbackSupplier.get();
     }
 
     private void recordLocalUsage(String promptKey, String input, String output) {

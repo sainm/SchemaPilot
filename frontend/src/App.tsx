@@ -95,6 +95,36 @@ type AiSuggestionDraft = {
   citedChunkKeys: string[]
 }
 
+type LocalLlmStatus = {
+  enabled: boolean
+  endpoint: string
+  model: string
+  reachable: boolean
+  discoveredModels: string[]
+  timeoutMs: number
+  requestCount: number
+  timeoutCount: number
+  failureCount: number
+  fallbackCount: number
+  lastError: string
+}
+
+type KnowledgeMetrics = {
+  searchCount: number
+  hitCount: number
+  acceptedCount: number
+  rejectedCount: number
+  hitRate: number
+  adoptionRate: number
+}
+
+type AiProviderConfig = {
+  type: string
+  enabled: boolean
+  endpoint?: string | null
+  model?: string | null
+}
+
 type SavedAiSuggestion = {
   id: string
   statementIndex: number
@@ -445,6 +475,42 @@ function useBackendHealth() {
   })
 }
 
+function useLocalLlmStatus() {
+  return useQuery({
+    queryKey: ['local-llm-status'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<LocalLlmStatus>>('/api/ai/local-status')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 10000,
+  })
+}
+
+function useKnowledgeMetrics() {
+  return useQuery({
+    queryKey: ['knowledge-metrics'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<KnowledgeMetrics>>('/api/knowledge/metrics')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 10000,
+  })
+}
+
+function useAiProviderConfigs() {
+  return useQuery({
+    queryKey: ['ai-provider-configs'],
+    queryFn: async () => {
+      const response = await axios.get<ApiResponse<AiProviderConfig[]>>('/api/ai/provider-configs')
+      return response.data.data
+    },
+    retry: false,
+    refetchInterval: 30000,
+  })
+}
+
 function useProjects() {
   return useQuery({
     queryKey: ['projects'],
@@ -737,6 +803,9 @@ function useExecuteMigrationPlan() {
 
 function App() {
   const health = useBackendHealth()
+  const localLlmStatus = useLocalLlmStatus()
+  const knowledgeMetrics = useKnowledgeMetrics()
+  const aiProviderConfigs = useAiProviderConfigs()
   const projects = useProjects()
   const dataSources = useDataSources()
   const createDataSource = useCreateDataSource()
@@ -771,7 +840,7 @@ function App() {
   const [selectedStatementIndex, setSelectedStatementIndex] = useState<number>()
   const [objectTypeFilter, setObjectTypeFilter] = useState('ALL')
   const [riskLevelFilter, setRiskLevelFilter] = useState('ALL')
-  const [targetSqlDraft, setTargetSqlDraft] = useState('')
+  const [targetSqlDraftByStatement, setTargetSqlDraftByStatement] = useState<Record<number, string>>({})
   const [pushedFileImportJob, setPushedFileImportJob] = useState<FileImportJob | null>(null)
   const [dataSourceDraft, setDataSourceDraft] = useState({
     name: 'oracle-source',
@@ -781,7 +850,7 @@ function App() {
     password: '',
   })
   const fileImportJob = useFileImportJob(fileImportJobId)
-  const visibleFileImportJob = pushedFileImportJob ?? fileImportJob.data
+  const visibleFileImportJob = fileImportJobId ? (pushedFileImportJob ?? fileImportJob.data) : undefined
   const activeAnalysis = analyzeSql.data ?? visibleFileImportJob?.analysis ?? null
   const filteredStatements = useMemo(() => {
     const statements = activeAnalysis?.statements ?? []
@@ -806,6 +875,7 @@ function App() {
       .find((version) => version.statementIndex === selectedStatement.index)
     return latestVersion?.sql ?? selectedStatement.postgresSql
   }, [selectedStatement, workbenchSnapshot])
+  const targetSqlDraft = selectedStatement ? (targetSqlDraftByStatement[selectedStatement.index] ?? latestTargetSql) : ''
   const selectedSavedSuggestion = workbenchSnapshot?.aiSuggestions.find((suggestion) => suggestion.statementIndex === selectedStatement?.index)
   const objectTypeOptions = useMemo(() => {
     const values = Array.from(new Set((activeAnalysis?.statements ?? []).map((statement) => statement.objectType))).sort()
@@ -819,14 +889,10 @@ function App() {
     { value: 'BLOCKER', label: 'BLOCKER' },
   ]
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
-
-  useEffect(() => {
-    setTargetSqlDraft(latestTargetSql)
-  }, [latestTargetSql])
+  const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
 
   useEffect(() => {
     if (!fileImportJobId) {
-      setPushedFileImportJob(null)
       return
     }
     const events = new EventSource(`/api/file-import/jobs/${fileImportJobId}/events`)
@@ -997,7 +1063,16 @@ function App() {
                                 if (workbenchSnapshot) {
                                   restoreGeneratedSql.mutate(
                                     { snapshotId: workbenchSnapshot.id, statementIndex: selectedStatement.index },
-                                    { onSuccess: setWorkbenchSnapshot },
+                                    {
+                                      onSuccess: (snapshot) => {
+                                        setWorkbenchSnapshot(snapshot)
+                                        setTargetSqlDraftByStatement((current) => {
+                                          const next = { ...current }
+                                          delete next[selectedStatement.index]
+                                          return next
+                                        })
+                                      },
+                                    },
                                   )
                                 }
                               }}
@@ -1038,7 +1113,12 @@ function App() {
                               height="260px"
                               defaultLanguage="sql"
                               value={targetSqlDraft}
-                              onChange={(value) => setTargetSqlDraft(value ?? '')}
+                              onChange={(value) => {
+                                setTargetSqlDraftByStatement((current) => ({
+                                  ...current,
+                                  [selectedStatement.index]: value ?? '',
+                                }))
+                              }}
                               options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
                             />
                           </div>
@@ -1145,7 +1225,10 @@ function App() {
                     showUploadList={false}
                     beforeUpload={(file) => {
                       uploadSqlFile.mutate(file as File, {
-                        onSuccess: (job) => setFileImportJobId(job.id),
+                        onSuccess: (job) => {
+                          setPushedFileImportJob(null)
+                          setFileImportJobId(job.id)
+                        },
                       })
                       return false
                     }}
@@ -1599,6 +1682,44 @@ function App() {
                     <RobotOutlined />
                     <Typography.Title level={5}>AI 副驾驶边界</Typography.Title>
                   </Space>
+                </div>
+                <div className="ai-status-grid">
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Local LLM</Typography.Text>
+                    <Badge status={localLlmStatus.data?.reachable ? 'success' : 'error'} text={localLlmStatus.data?.reachable ? 'reachable' : 'offline'} />
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Endpoint</Typography.Text>
+                    <Typography.Text ellipsis>{localLlmStatus.data?.endpoint ?? 'unknown'}</Typography.Text>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Model</Typography.Text>
+                    <Typography.Text>{localLlmStatus.data?.model ?? 'unknown'}</Typography.Text>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Discovered</Typography.Text>
+                    <Tag>{localLlmStatus.data?.discoveredModels.length ?? 0}</Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">RAG hit rate</Typography.Text>
+                    <Tag color={(knowledgeMetrics.data?.hitRate ?? 0) > 0 ? 'green' : 'default'}>
+                      {Math.round((knowledgeMetrics.data?.hitRate ?? 0) * 100)}%
+                    </Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Fallbacks</Typography.Text>
+                    <Tag color={(localLlmStatus.data?.fallbackCount ?? 0) > 0 ? 'gold' : 'green'}>{localLlmStatus.data?.fallbackCount ?? 0}</Tag>
+                  </div>
+                  <div className="status-line">
+                    <Typography.Text type="secondary">Cloud provider</Typography.Text>
+                    <Tag color={cloudProviderEnabled ? 'orange' : 'green'}>{cloudProviderEnabled ? 'enabled' : 'off'}</Tag>
+                  </div>
+                  {localLlmStatus.data?.lastError && (
+                    <div className="status-line wide-status">
+                      <Typography.Text type="secondary">Last error</Typography.Text>
+                      <Typography.Text type="danger" ellipsis>{localLlmStatus.data.lastError}</Typography.Text>
+                    </div>
+                  )}
                 </div>
                 <ul className="guardrails">
                   <li>AI 只能生成建议、解释和草稿</li>

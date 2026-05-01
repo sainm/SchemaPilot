@@ -45,6 +45,14 @@ class LocalFirstAiProviderTest {
             exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
             exchange.close();
         });
+        server.createContext("/v1/models", exchange -> {
+            var response = """
+                    {"data":[{"id":"qwen2.5-coder:latest"}]}
+                    """;
+            exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+            exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
         server.start();
         try {
             var client = new LocalLlmClient(
@@ -69,6 +77,8 @@ class LocalFirstAiProviderTest {
             assertThat(response.suggestion()).contains("timestamp");
             assertThat(response.citedChunkKeys()).contains("risk.date");
             assertThat(provider.usageStats().promptCounts()).containsKey("local.risk-explanation");
+            assertThat(provider.localStatus().reachable()).isTrue();
+            assertThat(provider.localStatus().discoveredModels()).contains("qwen2.5-coder:latest");
             assertThat(capturedRequest.get())
                     .contains("<redacted>")
                     .doesNotContain("secret123")
@@ -99,5 +109,35 @@ class LocalFirstAiProviderTest {
 
         assertThat(response.provider()).isEqualTo("mock");
         assertThat(response.suggestion()).contains("timestamp");
+        assertThat(provider.localStatus().fallbackCount()).isEqualTo(1);
+        assertThat(provider.localStatus().lastError()).isEqualTo("DISABLED");
+    }
+
+    @Test
+    void acceptsOpenAiCompatibleV1EndpointBase() throws Exception {
+        var server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/v1/chat/completions", exchange -> {
+            var response = """
+                    {"choices":[{"message":{"content":"local answer"}}]}
+                    """;
+            exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
+            exchange.getResponseBody().write(response.getBytes(StandardCharsets.UTF_8));
+            exchange.close();
+        });
+        server.start();
+        try {
+            var client = new LocalLlmClient(
+                    objectMapper,
+                    HttpClient.newHttpClient(),
+                    true,
+                    "http://localhost:" + server.getAddress().getPort() + "/v1",
+                    "qwen2.5-coder:latest",
+                    Duration.ofSeconds(5)
+            );
+
+            assertThat(client.complete("system", "user")).contains("local answer");
+        } finally {
+            server.stop(0);
+        }
     }
 }

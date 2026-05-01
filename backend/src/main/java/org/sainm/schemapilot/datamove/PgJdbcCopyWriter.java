@@ -3,6 +3,7 @@ package org.sainm.schemapilot.datamove;
 import org.postgresql.copy.CopyManager;
 import org.postgresql.core.BaseConnection;
 import org.sainm.schemapilot.datasource.DataSourceConfigService;
+import org.sainm.schemapilot.sql.SqlIdentifierValidator;
 import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
@@ -16,15 +17,17 @@ import java.util.stream.Collectors;
 public class PgJdbcCopyWriter implements PostgresCopyWriter {
     private final DataSourceConfigService dataSourceConfigService;
     private final MemoryBudgetManager memoryBudgetManager;
+    private final SqlIdentifierValidator identifierValidator;
 
-    public PgJdbcCopyWriter(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager) {
+    public PgJdbcCopyWriter(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager, SqlIdentifierValidator identifierValidator) {
         this.dataSourceConfigService = dataSourceConfigService;
         this.memoryBudgetManager = memoryBudgetManager;
+        this.identifierValidator = identifierValidator;
     }
 
     @Override
     public long copy(UUID targetDataSourceId, String targetTable, List<String> columns, Iterable<TableRow> rows, Consumer<DataMoveProgress> progressConsumer) {
-        var sql = "COPY " + targetTable + " (" + columns.stream().map(this::quote).collect(Collectors.joining(", ")) + ") FROM STDIN WITH (FORMAT text)";
+        var sql = "COPY " + identifierValidator.quoteQualified(targetTable) + " (" + columns.stream().map(identifierValidator::quote).collect(Collectors.joining(", ")) + ") FROM STDIN WITH (FORMAT text)";
         try (var output = new ByteArrayOutputStream();
              var buffer = new FfmCopyBuffer(memoryBudgetManager, Math.max(8192, memoryBudgetManager.shardBudgetBytes()))) {
             var count = 0L;
@@ -64,7 +67,4 @@ public class PgJdbcCopyWriter implements PostgresCopyWriter {
         buffer.writeRowEnd();
     }
 
-    private String quote(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
-    }
 }

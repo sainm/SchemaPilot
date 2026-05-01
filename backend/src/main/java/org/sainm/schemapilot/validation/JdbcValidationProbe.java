@@ -3,6 +3,7 @@ package org.sainm.schemapilot.validation;
 import org.sainm.schemapilot.datamove.MemoryBudgetManager;
 import org.sainm.schemapilot.datamove.TableRow;
 import org.sainm.schemapilot.datasource.DataSourceConfigService;
+import org.sainm.schemapilot.sql.SqlIdentifierValidator;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,17 +15,19 @@ import java.util.stream.Collectors;
 public class JdbcValidationProbe implements ValidationProbe {
     private final DataSourceConfigService dataSourceConfigService;
     private final MemoryBudgetManager memoryBudgetManager;
+    private final SqlIdentifierValidator identifierValidator;
 
-    public JdbcValidationProbe(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager) {
+    public JdbcValidationProbe(DataSourceConfigService dataSourceConfigService, MemoryBudgetManager memoryBudgetManager, SqlIdentifierValidator identifierValidator) {
         this.dataSourceConfigService = dataSourceConfigService;
         this.memoryBudgetManager = memoryBudgetManager;
+        this.identifierValidator = identifierValidator;
     }
 
     @Override
     public boolean objectExists(UUID dataSourceId, String objectName) {
         try (var connection = dataSourceConfigService.openConnection(dataSourceId);
              var statement = connection.createStatement()) {
-            statement.executeQuery("select 1 from " + objectName + " where 1 = 0").close();
+            statement.executeQuery("select 1 from " + identifierValidator.quoteQualified(objectName) + " where 1 = 0").close();
             return true;
         } catch (Exception ex) {
             return false;
@@ -35,7 +38,7 @@ public class JdbcValidationProbe implements ValidationProbe {
     public long rowCount(UUID dataSourceId, String tableName) {
         try (var connection = dataSourceConfigService.openConnection(dataSourceId);
              var statement = connection.createStatement();
-             var resultSet = statement.executeQuery("select count(*) from " + tableName)) {
+             var resultSet = statement.executeQuery("select count(*) from " + identifierValidator.quoteQualified(tableName))) {
             return resultSet.next() ? resultSet.getLong(1) : -1;
         } catch (Exception ex) {
             throw new ValidationProbeException("Row count validation failed for " + tableName + ": " + ex.getMessage(), ex);
@@ -47,9 +50,9 @@ public class JdbcValidationProbe implements ValidationProbe {
         if (limit <= 0) {
             return List.of();
         }
-        var sql = "select " + columns.stream().map(this::quote).collect(Collectors.joining(", "))
-                + " from " + tableName
-                + " order by " + quote(keyColumn)
+        var sql = "select " + columns.stream().map(identifierValidator::quote).collect(Collectors.joining(", "))
+                + " from " + identifierValidator.quoteQualified(tableName)
+                + " order by " + identifierValidator.quote(keyColumn)
                 + " fetch first " + limit + " rows only";
         try (var connection = dataSourceConfigService.openConnection(dataSourceId);
              var statement = connection.createStatement();
@@ -114,9 +117,9 @@ public class JdbcValidationProbe implements ValidationProbe {
     }
 
     private void streamRows(UUID dataSourceId, String tableName, List<String> columns, java.util.function.Consumer<TableRow> consumer) {
-        var sql = "select " + columns.stream().map(this::quote).collect(Collectors.joining(", "))
-                + " from " + tableName
-                + " order by " + quote(columns.get(0));
+        var sql = "select " + columns.stream().map(identifierValidator::quote).collect(Collectors.joining(", "))
+                + " from " + identifierValidator.quoteQualified(tableName)
+                + " order by " + identifierValidator.quote(columns.get(0));
         try (var connection = dataSourceConfigService.openConnection(dataSourceId);
              var statement = connection.createStatement();
              var resultSet = statement.executeQuery(sql)) {
@@ -158,7 +161,4 @@ public class JdbcValidationProbe implements ValidationProbe {
         }
     }
 
-    private String quote(String identifier) {
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
-    }
 }

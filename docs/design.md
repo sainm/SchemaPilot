@@ -58,10 +58,10 @@ SchemaPilot 的价值不是说“我能自动迁完所有 Oracle”，而是：
 | 输入来源 | 第一版支持策略 |
 |---|---|
 | Oracle 直连 | 支持，采集元数据、对象 DDL、PL/SQL 源码 |
-| `.sql` 文件 | 支持，解析 DDL、DML、PL/SQL 块 |
+| `.sql` 文件 | 支持，解析 DDL 和 PL/SQL 块；DML/INSERT 第一版保留原文并标记为不可直接执行的待处理 SQL |
 | Data Pump SQLFILE | 支持，用户先用 `impdp SQLFILE=xxx.sql` 导出 |
 | 手工 SQL | 支持，走同一套解析和转换流程 |
-| INSERT 脚本 | 支持识别，数据执行后置 |
+| INSERT 脚本 | 第一版不自动执行；作为输入源保留原文、生成风险/待处理项，后续进入数据迁移或专用导入闭环 |
 | CSV/Excel | 第二阶段支持，用于数据导入 |
 | `.dmp` 文件 | 第一版不直接解析，提供操作向导 |
 
@@ -102,7 +102,7 @@ flowchart LR
   A1["Oracle 直连"] --> A
   A2["SQL / DDL / PL/SQL 文件"] --> A
   A3["手工 SQL"] --> A
-  A4["CSV / Excel / INSERT 文件"] --> A
+  A4["CSV / Excel / INSERT 文件（P3）"] -.-> A5["专用数据导入闭环"]
 ```
 
 ### 4.1 P0 闭环：评估转换闭环
@@ -172,6 +172,35 @@ P2 开始把项目经验沉淀成平台能力。
 ```
 
 规则沉淀必须人工确认，不能由 AI 自动写入生效规则。
+
+### 4.4 P3 闭环：DML/INSERT 文件导入闭环
+
+INSERT 脚本和 DML 文件不进入 P0/P1 的 DDL 基线执行链路，避免把数据写入和结构审核混在一起。P3 单独建立数据导入闭环：
+
+```mermaid
+flowchart LR
+  A["INSERT / DML 文件"] --> B["文件入库和 checksum"]
+  B --> C["DML 语句切分"]
+  C --> D["目标表和列 identifier validator"]
+  D --> E["数据批次预检"]
+  E --> F["导入计划草稿"]
+  F --> G["人工审核"]
+  G --> H["事务批次执行或 COPY 改写"]
+  H --> I["行数、失败行、checksum 校验"]
+  I --> J{"是否通过"}
+  J -->|通过| K["导入报告归档"]
+  J -->|失败| L["失败批次回流 work item"]
+```
+
+闭环定义：
+
+- 入口：上传 `.sql`、`.txt` 中的 `INSERT`、`UPDATE`、`DELETE`、`MERGE`，或从 Data Pump SQLFILE 中识别出的 DML 片段。
+- 风险：默认标记 `DML_REVIEW_REQUIRED`；包含函数调用、子查询、动态 SQL、未列名 INSERT、sequence/current time、LOB literal、大事务时提升风险等级。
+- 产物：`dml_import_job`、`dml_batch`、`dml_parse_issue`、`dml_preview_report`、`dml_execution_log`、失败行样本、导入校验报告。
+- 门禁：必须先完成目标结构审核和迁移计划；目标表、schema、column 必须通过 identifier validator；预检报告审核通过后才允许正式导入。
+- 执行策略：小批量可用事务分批执行；大批量 INSERT 优先解析成行集并改写为 PostgreSQL `COPY FROM STDIN`；失败批次可单独重试。
+- 失败回流：解析失败、identifier 不合法、目标列不存在、类型转换失败、唯一约束冲突、行数校验失败都必须生成 work item，不能只写日志。
+- 验收用例：普通多行 INSERT、未列名 INSERT、包含单引号和 NULL、LOB/长文本、违反约束的失败批次、审核未通过禁止执行、执行后行数一致。
 
 ## 5. 状态机
 

@@ -4,6 +4,7 @@ import org.sainm.schemapilot.ai.SensitiveValueRedactor;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -120,5 +121,41 @@ class KnowledgeServiceTest {
         var unrelated = adapter.embed("large object checksum migration");
 
         assertThat(adapter.cosine(left, right)).isGreaterThan(adapter.cosine(left, unrelated));
+    }
+
+    @Test
+    void multiRecallUsesRepositoryVectorSearchWhenAvailable() {
+        var repository = new VectorAwareKnowledgeRepository();
+        var service = new KnowledgeService(repository, new SensitiveValueRedactor(), new LocalEmbeddingAdapter());
+        service.addChunk(
+                KnowledgeDocumentType.RULE,
+                "rule.vector.nvl",
+                "Vector NVL rule",
+                "NVL should be rewritten to COALESCE after type checks.",
+                Map.of("category", "function"),
+                "test",
+                1
+        );
+
+        var response = service.multiRecall(new KnowledgeSearchRequest("nvl rewrite", Map.of("category", "function"), 5));
+
+        assertThat(response.results()).isNotEmpty();
+        assertThat(response.channelHits()).containsKey("pgvector");
+        assertThat(repository.vectorSearchCount).isEqualTo(1);
+    }
+
+    private static class VectorAwareKnowledgeRepository extends InMemoryKnowledgeRepository {
+        private int vectorSearchCount;
+
+        @Override
+        public boolean supportsVectorSearch() {
+            return true;
+        }
+
+        @Override
+        public List<KnowledgeChunk> findNearestByEmbedding(float[] queryVector, Map<String, String> metadataFilters, int limit) {
+            vectorSearchCount++;
+            return findAll().stream().limit(limit).toList();
+        }
     }
 }

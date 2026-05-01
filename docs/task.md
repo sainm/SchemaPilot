@@ -12,6 +12,7 @@
 - `P0`：第一条评估转换闭环必须完成。
 - `P1`：结构执行和基础数据迁移。
 - `P2`：高速迁移、复杂对象、企业化增强。
+- `P3`：生产硬化、治理、真实环境联调。
 
 闭环验收要求：
 
@@ -493,7 +494,17 @@
 - [x] `P2` 验证大表分片策略。
 - [x] `P2` 验证 checksum 成本。
 
-## 28. Definition of Done
+## 28. P3：生产硬化 Backlog
+
+- [x] `P3` 增加 pgvector-backed `KnowledgeRepository` 或 Spring AI PgVectorStore adapter。
+- [x] `P3` 本地 LLM 增加健康检查、模型发现、超时指标和 fallback 计数。
+- [x] `P3` 前端显示本地 LLM endpoint 健康状态、当前模型、知识库命中率和云端 provider 开关状态。
+- [x] `P3` 生产 profile 禁止使用默认元数据库密码和默认 datasource 加密 key。
+- [x] `P3` 动态 SQL 中的 table、schema、column 标识符统一走白名单或 identifier validator。
+- [x] `P3` DML/INSERT 文件导入设计专用闭环：入口、风险、产物、门禁、失败回流和验收用例。
+- [x] `P3` 增加真实 Oracle/PostgreSQL/pgvector 环境的集成测试或 CI profile。
+
+## 29. Definition of Done
 
 一个任务完成必须满足：
 
@@ -515,7 +526,7 @@
 - 不绕过审核门禁。
 - 不丢失原始 SQL。
 
-## 29. MVP 完成标准
+## 30. MVP 完成标准
 
 MVP 完成时，用户应该可以：
 

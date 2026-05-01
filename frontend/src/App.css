@@ -93,6 +93,27 @@
   padding-left: 20px;
 }
 
+.ai-status-grid {
+  border-bottom: 1px solid #eaecf0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+}
+
+.status-line {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 110px minmax(0, 1fr);
+  min-height: 28px;
+}
+
+.wide-status {
+  grid-template-columns: 110px minmax(0, 1fr);
+}
+
 .sql-input textarea,
 .sql-input {
   font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;

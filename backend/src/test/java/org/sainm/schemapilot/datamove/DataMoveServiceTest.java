@@ -1,6 +1,7 @@
 package org.sainm.schemapilot.datamove;
 
 import org.junit.jupiter.api.Test;
+import org.sainm.schemapilot.sql.SqlIdentifierValidator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -130,7 +131,7 @@ class DataMoveServiceTest {
     }
 
     private DataMoveService service(OracleStreamingReader reader, PostgresCopyWriter writer, MemoryBudgetManager budget) {
-        return new DataMoveService(reader, writer, budget, new DataMoveShardPlanner(), new DataMoveConcurrencyLimiter());
+        return new DataMoveService(reader, writer, budget, new DataMoveShardPlanner(new SqlIdentifierValidator()), new DataMoveConcurrencyLimiter());
     }
 
     private DataMoveJob awaitFinished(DataMoveService service, UUID jobId) throws InterruptedException {

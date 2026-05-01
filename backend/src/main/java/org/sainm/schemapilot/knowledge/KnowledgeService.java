@@ -111,6 +111,15 @@ public class KnowledgeService {
         var queryVector = embeddingAdapter.embed(request.query());
         var channelHits = new java.util.LinkedHashMap<String, Integer>();
         var candidates = new java.util.LinkedHashMap<String, KnowledgeSearchResult>();
+        if (repository.supportsVectorSearch()) {
+            for (var chunk : repository.findNearestByEmbedding(queryVector, request.safeMetadata(), request.safeLimit() * 3)) {
+                var lexicalScore = score(chunk, queryTerms);
+                var metadataScore = metadataPartialScore(chunk, request.safeMetadata());
+                var vectorScore = (int) Math.round(embeddingAdapter.cosine(queryVector, embeddingAdapter.embed(chunk.title() + " " + chunk.content())) * 10);
+                channelHits.merge("pgvector", 1, Integer::sum);
+                putCandidate(candidates, chunk, lexicalScore * 3 + metadataScore * 2 + vectorScore + titleBoost(chunk, queryTerms));
+            }
+        }
         for (var chunk : repository.findAll()) {
             if (chunk.status() != KnowledgeChunkStatus.ACTIVE && chunk.status() != KnowledgeChunkStatus.REVIEWED) {
                 continue;
@@ -129,7 +138,7 @@ public class KnowledgeService {
             }
             var rerankScore = lexicalScore * 3 + metadataScore * 2 + vectorScore + titleBoost(chunk, queryTerms);
             if (rerankScore > 0 || !request.safeMetadata().isEmpty()) {
-                candidates.put(chunk.key(), new KnowledgeSearchResult(chunk, rerankScore, excerpt(chunk.content())));
+                putCandidate(candidates, chunk, rerankScore);
             }
         }
         var results = candidates.values().stream()
@@ -140,6 +149,13 @@ public class KnowledgeService {
             hitCount.incrementAndGet();
         }
         return new KnowledgeMultiRecallResponse(results, Map.copyOf(channelHits));
+    }
+
+    private void putCandidate(java.util.LinkedHashMap<String, KnowledgeSearchResult> candidates, KnowledgeChunk chunk, int score) {
+        var existing = candidates.get(chunk.key());
+        if (existing == null || score > existing.score()) {
+            candidates.put(chunk.key(), new KnowledgeSearchResult(chunk, score, excerpt(chunk.content())));
+        }
     }
 
     public KnowledgeChunk addHistoricalCase(HistoricalCaseRequest request) {
