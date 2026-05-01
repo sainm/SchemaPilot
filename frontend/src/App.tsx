@@ -40,7 +40,7 @@ type PipelineItem = {
   key: string
   stage: string
   owner: string
-  status: 'ready' | 'next' | 'planned'
+  status: 'completed'
   artifact: string
 }
 
@@ -342,12 +342,12 @@ type MigrationPlan = {
 }
 
 const pipeline: PipelineItem[] = [
-  { key: '1', stage: '输入源', owner: 'Ingest', status: 'ready', artifact: 'InputSource' },
-  { key: '2', stage: '对象识别', owner: 'Parser', status: 'next', artifact: 'DbObject / ParseIssue' },
-  { key: '3', stage: '规则转换', owner: 'Converter', status: 'planned', artifact: 'ConversionResult' },
-  { key: '4', stage: 'AI 建议', owner: 'AI Copilot', status: 'planned', artifact: 'AiSuggestion' },
-  { key: '5', stage: '预处理报告', owner: 'Report', status: 'planned', artifact: 'PrecheckReport' },
-  { key: '6', stage: '审核和基线', owner: 'Review', status: 'planned', artifact: 'ReviewRecord / Baseline SQL' },
+  { key: '1', stage: '输入源', owner: 'Ingest', status: 'completed', artifact: 'InputSource' },
+  { key: '2', stage: '对象识别', owner: 'Parser', status: 'completed', artifact: 'DbObject / ParseIssue' },
+  { key: '3', stage: '规则转换', owner: 'Converter', status: 'completed', artifact: 'ConversionResult' },
+  { key: '4', stage: 'AI 建议', owner: 'AI Copilot', status: 'completed', artifact: 'AiSuggestion' },
+  { key: '5', stage: '预处理报告', owner: 'Report', status: 'completed', artifact: 'PrecheckReport' },
+  { key: '6', stage: '审核和基线', owner: 'Review', status: 'completed', artifact: 'ReviewRecord / Baseline SQL' },
 ]
 
 const pipelineColumns: ColumnsType<PipelineItem> = [
@@ -369,9 +369,7 @@ const pipelineColumns: ColumnsType<PipelineItem> = [
     key: 'status',
     width: 140,
     render: (value: PipelineItem['status']) => {
-      const color = value === 'ready' ? 'green' : value === 'next' ? 'blue' : 'default'
-      const label = value === 'ready' ? '已启动' : value === 'next' ? '下一步' : '待实现'
-      return <Tag color={color}>{label}</Tag>
+      return <Tag color={value === 'completed' ? 'green' : 'default'}>已闭环</Tag>
     },
   },
 ]
