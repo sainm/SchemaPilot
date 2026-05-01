@@ -9,6 +9,7 @@ import org.sainm.schemapilot.sql.SqlStatementSplitter;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,6 +81,28 @@ class FileImportServiceTest {
 
         assertThat(completed.analysis().statements().getFirst().objectName()).isEqualTo("users");
         assertThat(completed.analysis().statements().getFirst().parseIssues()).isEmpty();
+    }
+
+    @Test
+    void combinesCompletedFileImportJobsIntoOneSourceBatch() throws Exception {
+        var tableJob = awaitCompleted(service.importSqlFile(
+                "tables.sql",
+                "CREATE TABLE users (id NUMBER);".getBytes(StandardCharsets.UTF_8),
+                null
+        ));
+        var viewJob = awaitCompleted(service.importSqlFile(
+                "views.sql",
+                "CREATE VIEW active_users AS SELECT id FROM users;".getBytes(StandardCharsets.UTF_8),
+                null
+        ));
+
+        var combined = service.combinedSourceSql(List.of(tableJob.id(), viewJob.id()));
+
+        assertThat(combined).contains("-- source file: tables.sql");
+        assertThat(combined).contains("-- source file: views.sql");
+        assertThat(combined).contains("CREATE TABLE users");
+        assertThat(combined).contains("CREATE VIEW active_users");
+        assertThat(service.sourceFileSummary(List.of(tableJob.id(), viewJob.id()))).isEqualTo("tables.sql, views.sql");
     }
 
     private FileImportJob awaitCompleted(FileImportJob job) throws InterruptedException {

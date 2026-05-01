@@ -13,12 +13,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 @Service
 public class FileImportService {
@@ -98,6 +100,37 @@ public class FileImportService {
             throw new NotFoundException("Original SQL not found for file import job: " + jobId);
         }
         return sql;
+    }
+
+    public String combinedSourceSql(List<UUID> jobIds) {
+        var uniqueJobIds = validateBatchJobIds(jobIds);
+        return uniqueJobIds.stream()
+                .map(jobId -> "-- source file: " + safeSqlComment(getJob(jobId).fileName()) + "\n" + sourceSql(jobId))
+                .collect(Collectors.joining("\n\n"));
+    }
+
+    public String sourceFileSummary(List<UUID> jobIds) {
+        var uniqueJobIds = validateBatchJobIds(jobIds);
+        return uniqueJobIds.stream()
+                .map(jobId -> safeSqlComment(getJob(jobId).fileName()))
+                .collect(Collectors.joining(", "));
+    }
+
+    private LinkedHashSet<UUID> validateBatchJobIds(List<UUID> jobIds) {
+        if (jobIds == null || jobIds.isEmpty()) {
+            throw new BadRequestException("At least one file import job is required.");
+        }
+        var uniqueJobIds = new LinkedHashSet<>(jobIds);
+        if (uniqueJobIds.size() != jobIds.size()) {
+            throw new BadRequestException("Duplicate file import jobs are not allowed in one batch.");
+        }
+        return uniqueJobIds;
+    }
+
+    private String safeSqlComment(String value) {
+        return (value == null || value.isBlank() ? "uploaded.sql" : value)
+                .replaceAll("[\\r\\n]+", " ")
+                .replace("*/", "* /");
     }
 
     private void update(UUID jobId, FileImportStatus status, int progressPercent, org.sainm.schemapilot.sql.SqlAnalysisResponse analysis, String error) {

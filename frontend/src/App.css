@@ -369,6 +369,67 @@
   margin-top: 8px;
 }
 
+.file-batch-toolbar {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.file-import-list {
+  display: grid;
+  gap: 10px;
+}
+
+.file-import-row {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+}
+
+.file-import-row:hover,
+.file-import-row-selected {
+  border-color: #1677ff;
+  box-shadow: 0 8px 20px rgba(16, 24, 40, 0.06);
+}
+
+.file-import-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.file-import-main strong {
+  color: #101828;
+  font-size: 14px;
+}
+
+.file-import-main small {
+  color: #667085;
+  font-size: 12px;
+}
+
+.file-import-error {
+  color: #cf1322 !important;
+}
+
+.file-import-side {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .version-summary {
   display: flex;
   flex-wrap: wrap;
@@ -588,6 +649,20 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 12px;
+  }
+
+  .file-batch-toolbar,
+  .file-import-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .file-batch-toolbar {
+    flex-direction: column;
+  }
+
+  .file-import-side {
+    align-items: flex-start;
   }
 
   .topbar {

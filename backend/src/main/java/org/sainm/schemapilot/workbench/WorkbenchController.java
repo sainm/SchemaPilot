@@ -34,6 +34,14 @@ public class WorkbenchController {
         return ApiResponse.ok(service.saveImportedSql(fileImportService.sourceSql(jobId), job.fileName()));
     }
 
+    @PostMapping("/file-import-jobs")
+    public ApiResponse<WorkbenchSnapshot> saveFileImportJobs(@Valid @RequestBody SaveFileImportJobsRequest request) {
+        return ApiResponse.ok(service.saveImportedSql(
+                fileImportService.combinedSourceSql(request.jobIds()),
+                fileImportService.sourceFileSummary(request.jobIds())
+        ));
+    }
+
     @GetMapping("/snapshots/{snapshotId}")
     public ApiResponse<WorkbenchSnapshot> getSnapshot(@PathVariable UUID snapshotId) {
         return ApiResponse.ok(service.getSnapshot(snapshotId));

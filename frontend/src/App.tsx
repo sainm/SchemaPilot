@@ -226,6 +226,8 @@ type FileImportJob = {
   progressPercent: number
   analysis?: SqlAnalysisResponse | null
   errorMessage?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 type HighRiskObject = {
@@ -746,17 +748,11 @@ function useSaveFileImportSnapshot() {
   })
 }
 
-function useFileImportJob(jobId?: string) {
-  return useQuery({
-    queryKey: ['file-import-job', jobId],
-    queryFn: async () => {
-      const response = await axios.get<ApiResponse<FileImportJob>>(`/api/file-import/jobs/${jobId}`)
+function useCreateFileImportBatchSnapshot() {
+  return useMutation({
+    mutationFn: async (jobIds: string[]) => {
+      const response = await axios.post<ApiResponse<WorkbenchSnapshot>>('/api/workbench/file-import-jobs', { jobIds })
       return response.data.data
-    },
-    enabled: Boolean(jobId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'COMPLETED' || status === 'FAILED' ? false : 1000
     },
   })
 }
@@ -897,6 +893,7 @@ function App() {
   const restoreGeneratedSql = useRestoreGeneratedSql()
   const uploadSqlFile = useUploadSqlFile()
   const saveFileImportSnapshot = useSaveFileImportSnapshot()
+  const createFileImportBatchSnapshot = useCreateFileImportBatchSnapshot()
   const skills = useSkills()
   const mcpStatus = useMcpStatus()
   const mcpResources = useMcpResources()
@@ -908,12 +905,12 @@ function App() {
   const [manualSql, setManualSql] = useState(sampleSql)
   const [workbenchSnapshot, setWorkbenchSnapshot] = useState<WorkbenchSnapshot | null>(null)
   const [migrationPlan, setMigrationPlan] = useState<MigrationPlan | null>(null)
-  const [fileImportJobId, setFileImportJobId] = useState<string>()
+  const [fileImportJobsById, setFileImportJobsById] = useState<Record<string, FileImportJob>>({})
+  const [selectedFileImportJobId, setSelectedFileImportJobId] = useState<string>()
   const [selectedStatementIndex, setSelectedStatementIndex] = useState<number>()
   const [objectTypeFilter, setObjectTypeFilter] = useState('ALL')
   const [riskLevelFilter, setRiskLevelFilter] = useState('ALL')
   const [targetSqlDraftByStatement, setTargetSqlDraftByStatement] = useState<Record<number, string>>({})
-  const [pushedFileImportJob, setPushedFileImportJob] = useState<FileImportJob | null>(null)
   const [activeMenuKey, setActiveMenuKey] = useState<MenuKey>('dashboard')
   const [dataSourceDraft, setDataSourceDraft] = useState({
     name: 'oracle-source',
@@ -922,9 +919,13 @@ function App() {
     username: 'system',
     password: '',
   })
-  const fileImportJob = useFileImportJob(fileImportJobId)
-  const visibleFileImportJob = fileImportJobId ? (pushedFileImportJob ?? fileImportJob.data) : undefined
-  const activeAnalysis = analyzeSql.data ?? visibleFileImportJob?.analysis ?? null
+  const visibleFileImportJobs = useMemo(
+    () => Object.values(fileImportJobsById).sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+    [fileImportJobsById],
+  )
+  const selectedFileImportJob = selectedFileImportJobId ? fileImportJobsById[selectedFileImportJobId] : visibleFileImportJobs[0]
+  const completedFileImportJobs = visibleFileImportJobs.filter((job) => job.status === 'COMPLETED')
+  const activeAnalysis = analyzeSql.data ?? selectedFileImportJob?.analysis ?? null
   const filteredStatements = useMemo(() => {
     const statements = activeAnalysis?.statements ?? []
     return statements.filter((statement) => {
@@ -1065,6 +1066,11 @@ function App() {
   const completedWorkflowCount = workflowChecks.filter((item) => item.done).length
   const closedLoopPercent = Math.round((completedWorkflowCount / workflowChecks.length) * 100)
   const nextWorkflowCheck = workflowChecks.find((item) => !item.done) ?? workflowChecks[workflowChecks.length - 1]
+  const activeFileImportSubscriptionKey = visibleFileImportJobs
+    .filter((job) => job.status !== 'COMPLETED' && job.status !== 'FAILED')
+    .map((job) => job.id)
+    .sort()
+    .join('|')
 
   const switchView = (key: MenuKey) => {
     setActiveMenuKey(key)
@@ -1074,16 +1080,20 @@ function App() {
   const isActiveView = (...keys: MenuKey[]) => keys.includes(activeMenuKey)
 
   useEffect(() => {
-    if (!fileImportJobId) {
+    if (!activeFileImportSubscriptionKey) {
       return
     }
-    const events = new EventSource(`/api/file-import/jobs/${fileImportJobId}/events`)
-    events.addEventListener('file-import-progress', (event) => {
-      setPushedFileImportJob(JSON.parse((event as MessageEvent).data) as FileImportJob)
+    const events = activeFileImportSubscriptionKey.split('|').map((jobId) => {
+      const eventSource = new EventSource(`/api/file-import/jobs/${jobId}/events`)
+      eventSource.addEventListener('file-import-progress', (event) => {
+        const job = JSON.parse((event as MessageEvent).data) as FileImportJob
+        setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+      })
+      eventSource.onerror = () => eventSource.close()
+      return eventSource
     })
-    events.onerror = () => events.close()
-    return () => events.close()
-  }, [fileImportJobId])
+    return () => events.forEach((eventSource) => eventSource.close())
+  }, [activeFileImportSubscriptionKey])
 
   return (
     <ConfigProvider
@@ -1411,57 +1421,93 @@ function App() {
                 <div className="panel-header">
                   <Space>
                     <CloudUploadOutlined />
-                    <Typography.Title level={5}>SQL 文件导入</Typography.Title>
+                    <Typography.Title level={5}>SQL 文件批次导入</Typography.Title>
                   </Space>
                   <Upload
                     accept=".sql,.txt"
+                    multiple
                     showUploadList={false}
                     beforeUpload={(file) => {
                       uploadSqlFile.mutate(file as File, {
                         onSuccess: (job) => {
-                          setPushedFileImportJob(null)
-                          setFileImportJobId(job.id)
+                          setFileImportJobsById((current) => ({ ...current, [job.id]: job }))
+                          setSelectedFileImportJobId(job.id)
                         },
                       })
                       return false
                     }}
                   >
-                    <Button loading={uploadSqlFile.isPending}>上传</Button>
+                    <Button loading={uploadSqlFile.isPending}>上传多个文件</Button>
                   </Upload>
                 </div>
                 {uploadSqlFile.isError && (
                   <Alert className="inline-alert" type="error" showIcon message="文件上传失败" description={String(uploadSqlFile.error)} />
                 )}
-                {visibleFileImportJob && (
+                {visibleFileImportJobs.length === 0 && (
+                  <Alert
+                    className="inline-alert"
+                    type="info"
+                    showIcon
+                    message="可以一次选择多个 SQL 文件"
+                    description="每个文件会独立解析、记录 checksum 和进度；完成后可以单独保存快照，也可以把多个完成文件合并为一个输入源批次。"
+                  />
+                )}
+                {visibleFileImportJobs.length > 0 && (
                   <div className="file-import">
-                    <Space className="analysis-metrics" wrap>
-                      <Tag color="blue">{visibleFileImportJob.fileName}</Tag>
-                      <Tag>{visibleFileImportJob.encoding}</Tag>
-                      <Tag>{visibleFileImportJob.sizeBytes} bytes</Tag>
-                      <Tag color={visibleFileImportJob.status === 'COMPLETED' ? 'green' : visibleFileImportJob.status === 'FAILED' ? 'red' : 'gold'}>
-                        {visibleFileImportJob.status}
-                      </Tag>
-                    </Space>
-                    <Progress percent={visibleFileImportJob.progressPercent} />
-                    <Typography.Text type="secondary">checksum {visibleFileImportJob.checksumSha256.slice(0, 20)}...</Typography.Text>
-                    <div className="agent-actions">
+                    <div className="file-batch-toolbar">
+                      <Space wrap>
+                        <Tag color="blue">文件 {visibleFileImportJobs.length}</Tag>
+                        <Tag color="green">已完成 {completedFileImportJobs.length}</Tag>
+                        <Tag color={visibleFileImportJobs.some((job) => job.status === 'FAILED') ? 'red' : 'default'}>
+                          失败 {visibleFileImportJobs.filter((job) => job.status === 'FAILED').length}
+                        </Tag>
+                      </Space>
                       <Button
                         size="small"
-                        disabled={visibleFileImportJob.status !== 'COMPLETED'}
-                        loading={saveFileImportSnapshot.isPending}
-                        onClick={() => saveFileImportSnapshot.mutate(visibleFileImportJob.id, { onSuccess: setWorkbenchSnapshot })}
+                        type="primary"
+                        disabled={completedFileImportJobs.length === 0}
+                        loading={createFileImportBatchSnapshot.isPending}
+                        onClick={() => createFileImportBatchSnapshot.mutate(completedFileImportJobs.map((job) => job.id), { onSuccess: setWorkbenchSnapshot })}
                       >
-                        保存为快照
+                        合并完成文件为快照
                       </Button>
                     </div>
-                    {visibleFileImportJob.errorMessage && (
-                      <Alert className="inline-alert" type="error" showIcon message={visibleFileImportJob.errorMessage} />
-                    )}
-                    {visibleFileImportJob.analysis && (
+                    <div className="file-import-list">
+                      {visibleFileImportJobs.map((job) => (
+                        <button
+                          key={job.id}
+                          className={`file-import-row ${job.id === selectedFileImportJob?.id ? 'file-import-row-selected' : ''}`}
+                          type="button"
+                          onClick={() => setSelectedFileImportJobId(job.id)}
+                        >
+                          <span className="file-import-main">
+                            <strong>{job.fileName}</strong>
+                            <small>checksum {job.checksumSha256.slice(0, 20)}... / {job.encoding} / {job.sizeBytes} bytes</small>
+                            <Progress percent={job.progressPercent} size="small" showInfo={false} />
+                            {job.errorMessage && <small className="file-import-error">{job.errorMessage}</small>}
+                          </span>
+                          <span className="file-import-side">
+                            <Tag color={job.status === 'COMPLETED' ? 'green' : job.status === 'FAILED' ? 'red' : 'gold'}>{job.status}</Tag>
+                            <Button
+                              size="small"
+                              disabled={job.status !== 'COMPLETED'}
+                              loading={saveFileImportSnapshot.isPending}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                saveFileImportSnapshot.mutate(job.id, { onSuccess: setWorkbenchSnapshot })
+                              }}
+                            >
+                              单文件快照
+                            </Button>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {selectedFileImportJob?.analysis && (
                       <Table
                         className="report-table"
                         columns={statementColumns}
-                        dataSource={visibleFileImportJob.analysis.statements}
+                        dataSource={selectedFileImportJob.analysis.statements}
                         pagination={false}
                         rowKey="index"
                         size="small"
