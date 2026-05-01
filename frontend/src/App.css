@@ -48,6 +48,10 @@
   padding: 16px 18px;
 }
 
+.view-title > .ant-btn {
+  flex: 0 0 auto;
+}
+
 .view-title h3,
 .view-title .ant-typography {
   margin: 0;
@@ -123,6 +127,90 @@
   line-height: 1.9;
   margin: 0;
   padding-left: 20px;
+}
+
+.workflow-board {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.workflow-card {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  color: #344054;
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  min-height: 86px;
+  padding: 12px;
+  text-align: left;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.workflow-card:hover {
+  border-color: #1677ff;
+  box-shadow: 0 10px 24px rgba(16, 24, 40, 0.08);
+  transform: translateY(-1px);
+}
+
+.workflow-card-done {
+  background: #f6ffed;
+  border-color: #b7eb8f;
+}
+
+.workflow-card-next {
+  background: #eff6ff;
+  border-color: #91caff;
+}
+
+.workflow-index {
+  align-items: center;
+  background: #f2f4f7;
+  border-radius: 999px;
+  color: #667085;
+  display: flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.workflow-card-done .workflow-index {
+  background: #d9f7be;
+  color: #389e0d;
+}
+
+.workflow-card-next .workflow-index {
+  background: #d6e4ff;
+  color: #1677ff;
+}
+
+.workflow-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.workflow-copy strong {
+  color: #101828;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.workflow-copy small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.workflow-arrow {
+  color: #98a2b3;
 }
 
 .ai-status-grid {
@@ -398,10 +486,17 @@
 @media (max-width: 960px) {
   .summary-band,
   .workspace-grid,
+  .workflow-board,
   .sql-preview-grid,
   .report-grid,
   .report-lists {
     grid-template-columns: 1fr;
+  }
+
+  .view-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .topbar {

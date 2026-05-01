@@ -1,8 +1,10 @@
 import {
   ApiOutlined,
   AuditOutlined,
+  ArrowRightOutlined,
   BranchesOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloudUploadOutlined,
   CodeOutlined,
   DatabaseOutlined,
@@ -11,6 +13,7 @@ import {
   PlusOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons'
 import Editor from '@monaco-editor/react'
 import { StatisticCard } from '@ant-design/pro-components'
@@ -45,6 +48,19 @@ type PipelineItem = {
 }
 
 type MenuKey = 'dashboard' | 'imports' | 'inventory' | 'workbench' | 'ai' | 'review' | 'execution'
+
+type ViewMeta = {
+  title: string
+  description: string
+}
+
+type WorkflowCheck = {
+  key: string
+  label: string
+  detail: string
+  done: boolean
+  action: MenuKey
+}
 
 type ProjectItem = {
   id: string
@@ -384,6 +400,37 @@ const menuTargets: Record<MenuKey, string> = {
   ai: 'section-ai',
   review: 'section-review',
   execution: 'section-execution',
+}
+
+const viewMeta: Record<MenuKey, ViewMeta> = {
+  dashboard: {
+    title: '项目总览',
+    description: '查看迁移闭环、系统状态和当前项目进展。',
+  },
+  imports: {
+    title: '输入源',
+    description: '输入手工 SQL 或上传 SQL 文件，生成可追溯输入源。',
+  },
+  inventory: {
+    title: '对象清单',
+    description: '查看解析出的对象、风险、转换等级和兼容性评分。',
+  },
+  workbench: {
+    title: '转换工作台',
+    description: '对比 Oracle 原文和 PostgreSQL 目标 SQL，处理风险和 AI 建议。',
+  },
+  ai: {
+    title: 'AI 副驾驶',
+    description: '查看本地 LLM、RAG、Agent、MCP 和 Skills 的运行状态。',
+  },
+  review: {
+    title: '审核中心',
+    description: '生成预处理报告，提交审核，冻结 SQL 基线并导出 SQL 包。',
+  },
+  execution: {
+    title: '迁移计划',
+    description: '维护数据源，生成迁移计划并执行已审核的 DDL。',
+  },
 }
 
 const projectColumns: ColumnsType<ProjectItem> = [
@@ -901,6 +948,54 @@ function App() {
   ]
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
   const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
+  const approvedReviewCount = workbenchSnapshot?.reviewRecords.filter((record) => record.decision === 'APPROVED').length ?? 0
+  const workflowChecks: WorkflowCheck[] = [
+    {
+      key: 'input',
+      label: '完成输入识别',
+      detail: activeAnalysis ? `${activeAnalysis.statementCount} 条语句，${activeAnalysis.riskCount} 个风险` : '分析手工 SQL 或导入 SQL 文件',
+      done: Boolean(activeAnalysis),
+      action: 'imports',
+    },
+    {
+      key: 'snapshot',
+      label: '保存工作快照',
+      detail: workbenchSnapshot ? `快照 ${workbenchSnapshot.id.slice(0, 8)}` : '保存对象、转换结果和 SQL 版本链',
+      done: Boolean(workbenchSnapshot),
+      action: 'workbench',
+    },
+    {
+      key: 'report',
+      label: '生成预处理报告',
+      detail: generatePrecheck.data ? generatePrecheck.data.reportVersion : '形成可审核的资产、风险和建议报告',
+      done: Boolean(generatePrecheck.data),
+      action: 'review',
+    },
+    {
+      key: 'review',
+      label: '通过审核门禁',
+      detail: approvedReviewCount > 0 ? `${approvedReviewCount} 条通过记录` : '审核通过前禁止正式导出和执行',
+      done: approvedReviewCount > 0,
+      action: 'review',
+    },
+    {
+      key: 'baseline',
+      label: '冻结 SQL 基线',
+      detail: workbenchSnapshot?.baselineFrozen ? workbenchSnapshot.baselineStatus : '基线冻结后才能生成正式迁移计划',
+      done: Boolean(workbenchSnapshot?.baselineFrozen),
+      action: 'review',
+    },
+    {
+      key: 'execution',
+      label: '生成迁移计划',
+      detail: migrationPlan ? `${migrationPlan.steps.length} 个执行步骤` : '绑定 PostgreSQL 目标数据源并执行 DDL',
+      done: Boolean(migrationPlan),
+      action: 'execution',
+    },
+  ]
+  const completedWorkflowCount = workflowChecks.filter((item) => item.done).length
+  const closedLoopPercent = Math.round((completedWorkflowCount / workflowChecks.length) * 100)
+  const nextWorkflowCheck = workflowChecks.find((item) => !item.done) ?? workflowChecks[workflowChecks.length - 1]
 
   const switchView = (key: MenuKey) => {
     setActiveMenuKey(key)
@@ -969,39 +1064,26 @@ function App() {
           <Layout.Content className="content">
             <div className="view-title">
               <Space direction="vertical" size={2}>
-                <Typography.Title level={3}>
-                  {{
-                    dashboard: '项目总览',
-                    imports: '输入源',
-                    inventory: '对象清单',
-                    workbench: '转换工作台',
-                    ai: 'AI 副驾驶',
-                    review: '审核中心',
-                    execution: '迁移计划',
-                  }[activeMenuKey]}
-                </Typography.Title>
-                <Typography.Text type="secondary">
-                  {{
-                    dashboard: '查看迁移闭环、系统状态和当前项目进展。',
-                    imports: '输入手工 SQL 或上传 SQL 文件，生成可追溯输入源。',
-                    inventory: '查看解析出的对象、风险、转换等级和兼容性评分。',
-                    workbench: '对比 Oracle 原文和 PostgreSQL 目标 SQL，处理风险和 AI 建议。',
-                    ai: '查看本地 LLM、RAG、Agent、MCP 和 Skills 的运行状态。',
-                    review: '生成预处理报告，提交审核，冻结 SQL 基线并导出 SQL 包。',
-                    execution: '维护数据源，生成迁移计划并执行已审核的 DDL。',
-                  }[activeMenuKey]}
-                </Typography.Text>
+                <Typography.Title level={3}>{viewMeta[activeMenuKey].title}</Typography.Title>
+                <Typography.Text type="secondary">{viewMeta[activeMenuKey].description}</Typography.Text>
               </Space>
+              <Button
+                type={nextWorkflowCheck.done ? 'default' : 'primary'}
+                icon={nextWorkflowCheck.done ? <CheckCircleOutlined /> : <ArrowRightOutlined />}
+                onClick={() => switchView(nextWorkflowCheck.action)}
+              >
+                {nextWorkflowCheck.done ? '查看闭环' : `下一步：${nextWorkflowCheck.label}`}
+              </Button>
             </div>
 
             <section id="section-dashboard" className={`summary-band view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
               <StatisticCard
                 statistic={{
                   title: '闭环完成度',
-                  value: generatePrecheck.data ? 28 : 20,
+                  value: closedLoopPercent,
                   suffix: '%',
                 }}
-                chart={<Progress percent={generatePrecheck.data ? 28 : 20} strokeColor="#1677ff" showInfo={false} />}
+                chart={<Progress percent={closedLoopPercent} strokeColor="#1677ff" showInfo={false} />}
               />
               <StatisticCard
                 statistic={{
@@ -1011,8 +1093,8 @@ function App() {
               />
               <StatisticCard
                 statistic={{
-                  title: '报告状态',
-                  value: generatePrecheck.data ? '已生成快照' : '未生成',
+                  title: '下一步',
+                  value: nextWorkflowCheck.done ? '闭环可复查' : nextWorkflowCheck.label,
                 }}
               />
               <StatisticCard
@@ -1494,6 +1576,25 @@ function App() {
                     <Typography.Title level={5}>P0 闭环流水线</Typography.Title>
                   </Space>
                   <Button type="primary" onClick={() => switchView('imports')}>新建输入源</Button>
+                </div>
+                <div className="workflow-board">
+                  {workflowChecks.map((item, index) => (
+                    <button
+                      key={item.key}
+                      className={`workflow-card ${item.done ? 'workflow-card-done' : item.key === nextWorkflowCheck.key ? 'workflow-card-next' : ''}`}
+                      type="button"
+                      onClick={() => switchView(item.action)}
+                    >
+                      <span className="workflow-index">
+                        {item.done ? <CheckCircleOutlined /> : item.key === nextWorkflowCheck.key ? <ThunderboltOutlined /> : <ClockCircleOutlined />}
+                      </span>
+                      <span className="workflow-copy">
+                        <strong>{index + 1}. {item.label}</strong>
+                        <small>{item.detail}</small>
+                      </span>
+                      <ArrowRightOutlined className="workflow-arrow" />
+                    </button>
+                  ))}
                 </div>
                 <Table columns={pipelineColumns} dataSource={pipeline} pagination={false} size="middle" />
               </div>
