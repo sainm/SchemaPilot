@@ -33,8 +33,36 @@
 }
 
 .content {
-  background: #f6f8fb;
-  padding: 24px;
+  background: #f5f7fb;
+  padding: 22px 24px 28px;
+}
+
+.view-title {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.view-title h3,
+.view-title .ant-typography {
+  margin: 0;
+}
+
+.view-panel {
+  display: none;
+}
+
+.view-panel.view-active {
+  display: block;
+}
+
+.summary-band.view-active {
+  display: grid;
 }
 
 .summary-band {

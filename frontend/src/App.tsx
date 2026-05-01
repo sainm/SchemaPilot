@@ -902,14 +902,12 @@ function App() {
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
   const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
 
-  const scrollToMenuTarget = (key: MenuKey) => {
+  const switchView = (key: MenuKey) => {
     setActiveMenuKey(key)
-    const target = document.getElementById(menuTargets[key]) ?? document.getElementById('section-inventory') ?? document.getElementById('section-dashboard')
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      window.history.replaceState(null, '', `#${menuTargets[key]}`)
-    }
+    window.history.replaceState(null, '', `#${menuTargets[key]}`)
   }
+
+  const isActiveView = (...keys: MenuKey[]) => keys.includes(activeMenuKey)
 
   useEffect(() => {
     if (!fileImportJobId) {
@@ -943,7 +941,7 @@ function App() {
             theme="dark"
             mode="inline"
             selectedKeys={[activeMenuKey]}
-            onClick={({ key }) => scrollToMenuTarget(key as MenuKey)}
+            onClick={({ key }) => switchView(key as MenuKey)}
             items={[
               { key: 'dashboard', icon: <FileSearchOutlined />, label: '项目总览' },
               { key: 'imports', icon: <CloudUploadOutlined />, label: '输入源' },
@@ -964,12 +962,39 @@ function App() {
             </Space>
             <Space>
               <Badge status={health.data?.status === 'UP' ? 'success' : 'error'} text={health.data?.status ?? '未连接'} />
-              <Button icon={<SafetyCertificateOutlined />}>审核门禁</Button>
+              <Button icon={<SafetyCertificateOutlined />} onClick={() => switchView('review')}>审核门禁</Button>
             </Space>
           </Layout.Header>
 
           <Layout.Content className="content">
-            <section id="section-dashboard" className="summary-band">
+            <div className="view-title">
+              <Space direction="vertical" size={2}>
+                <Typography.Title level={3}>
+                  {{
+                    dashboard: '项目总览',
+                    imports: '输入源',
+                    inventory: '对象清单',
+                    workbench: '转换工作台',
+                    ai: 'AI 副驾驶',
+                    review: '审核中心',
+                    execution: '迁移计划',
+                  }[activeMenuKey]}
+                </Typography.Title>
+                <Typography.Text type="secondary">
+                  {{
+                    dashboard: '查看迁移闭环、系统状态和当前项目进展。',
+                    imports: '输入手工 SQL 或上传 SQL 文件，生成可追溯输入源。',
+                    inventory: '查看解析出的对象、风险、转换等级和兼容性评分。',
+                    workbench: '对比 Oracle 原文和 PostgreSQL 目标 SQL，处理风险和 AI 建议。',
+                    ai: '查看本地 LLM、RAG、Agent、MCP 和 Skills 的运行状态。',
+                    review: '生成预处理报告，提交审核，冻结 SQL 基线并导出 SQL 包。',
+                    execution: '维护数据源，生成迁移计划并执行已审核的 DDL。',
+                  }[activeMenuKey]}
+                </Typography.Text>
+              </Space>
+            </div>
+
+            <section id="section-dashboard" className={`summary-band view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
               <StatisticCard
                 statistic={{
                   title: '闭环完成度',
@@ -999,7 +1024,7 @@ function App() {
             </section>
 
             <Alert
-              className="status-alert"
+              className={`status-alert view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}
               type={health.data?.status === 'UP' ? 'success' : 'warning'}
               showIcon
               icon={<CheckCircleOutlined />}
@@ -1012,7 +1037,7 @@ function App() {
             />
 
             <section className="workspace-grid">
-              <div id="section-inventory" className="panel wide">
+              <div id="section-inventory" className={`panel wide view-panel ${isActiveView('imports', 'inventory', 'workbench') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <CodeOutlined />
@@ -1235,7 +1260,7 @@ function App() {
                 )}
               </div>
 
-              <div id="section-imports" className="panel">
+              <div id="section-imports" className={`panel view-panel ${isActiveView('imports') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <CloudUploadOutlined />
@@ -1299,8 +1324,31 @@ function App() {
                 )}
               </div>
 
+              {activeMenuKey === 'review' && !workbenchSnapshot && !generatePrecheck.data && (
+                <div className="panel view-panel view-active">
+                  <div className="panel-header">
+                    <Space>
+                      <AuditOutlined />
+                      <Typography.Title level={5}>审核中心</Typography.Title>
+                    </Space>
+                  </div>
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="还没有可审核的快照"
+                    description="先在输入源中分析 SQL，然后保存快照并生成预处理报告。审核中心会在这里展示版本链、审核记录和 SQL 包导出。"
+                  />
+                  <Space className="review-actions">
+                    <Button onClick={() => switchView('imports')}>去输入源</Button>
+                    <Button type="primary" loading={generatePrecheck.isPending} onClick={() => generatePrecheck.mutate(manualSql)}>
+                      生成预处理报告
+                    </Button>
+                  </Space>
+                </div>
+              )}
+
               {workbenchSnapshot && (
-                <div id="section-review" className="panel">
+                <div id="section-review" className={`panel view-panel ${isActiveView('review') ? 'view-active' : ''}`}>
                   <div className="panel-header">
                     <Space>
                       <AuditOutlined />
@@ -1368,7 +1416,7 @@ function App() {
               )}
 
               {generatePrecheck.data && (
-                <div className="panel wide">
+                <div className={`panel wide view-panel ${isActiveView('review') ? 'view-active' : ''}`}>
                   <div className="panel-header">
                     <Space>
                       <FileSearchOutlined />
@@ -1439,24 +1487,24 @@ function App() {
                 </div>
               )}
 
-              <div className="panel wide">
+              <div className={`panel wide view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <ApiOutlined />
                     <Typography.Title level={5}>P0 闭环流水线</Typography.Title>
                   </Space>
-                  <Button type="primary">新建输入源</Button>
+                  <Button type="primary" onClick={() => switchView('imports')}>新建输入源</Button>
                 </div>
                 <Table columns={pipelineColumns} dataSource={pipeline} pagination={false} size="middle" />
               </div>
 
-              <div id="section-ai" className="panel">
+              <div className={`panel view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
                     <Typography.Title level={5}>迁移项目</Typography.Title>
                   </Space>
-                  <Button icon={<PlusOutlined />}>新建</Button>
+                  <Button icon={<PlusOutlined />} onClick={() => switchView('imports')}>新建</Button>
                 </div>
                 <Table
                   columns={projectColumns}
@@ -1471,7 +1519,7 @@ function App() {
                 />
               </div>
 
-              <div id="section-execution" className="panel">
+              <div className={`panel view-panel ${isActiveView('execution') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <DatabaseOutlined />
@@ -1549,7 +1597,7 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div id="section-ai" className={`panel view-panel ${isActiveView('ai') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <RobotOutlined />
@@ -1638,7 +1686,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="panel">
+              <div id="section-execution" className={`panel view-panel ${isActiveView('execution') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <BranchesOutlined />
@@ -1697,7 +1745,7 @@ function App() {
                 )}
               </div>
 
-              <div className="panel">
+              <div className={`panel view-panel ${isActiveView('ai') ? 'view-active' : ''}`}>
                 <div className="panel-header">
                   <Space>
                     <RobotOutlined />
