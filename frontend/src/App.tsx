@@ -1053,7 +1053,7 @@ function App() {
           <Layout.Header className="topbar">
             <Space direction="vertical" size={0}>
               <Typography.Title level={4}>Oracle 到 PostgreSQL 迁移项目</Typography.Title>
-              <Typography.Text type="secondary">P0 目标：输入、识别、转换、AI 建议、报告、审核、SQL 包导出闭环</Typography.Text>
+              <Typography.Text type="secondary">覆盖评估、转换、审核、执行、校验、AI/RAG 和规则沉淀的迁移闭环</Typography.Text>
             </Space>
             <Space>
               <Badge status={health.data?.status === 'UP' ? 'success' : 'error'} text={health.data?.status ?? '未连接'} />
@@ -1568,7 +1568,7 @@ function App() {
                 <div className="panel-header">
                   <Space>
                     <ApiOutlined />
-                    <Typography.Title level={5}>P0 闭环流水线</Typography.Title>
+                    <Typography.Title level={5}>迁移闭环流水线</Typography.Title>
                   </Space>
                   <Button type="primary" onClick={() => switchView('imports')}>新建输入源</Button>
                 </div>
