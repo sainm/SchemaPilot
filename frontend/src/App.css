@@ -379,6 +379,71 @@
   margin-top: 12px;
 }
 
+.rule-flow {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.rule-flow-step {
+  background: #f8fafc;
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 128px;
+  padding: 12px;
+}
+
+.rule-flow-step span {
+  align-items: center;
+  background: #1677ff;
+  border-radius: 999px;
+  color: #ffffff;
+  display: flex;
+  font-size: 12px;
+  font-weight: 700;
+  height: 26px;
+  justify-content: center;
+  width: 26px;
+}
+
+.rule-flow-step strong {
+  color: #101828;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.rule-flow-step small {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rule-candidate-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.rule-candidate {
+  border: 1px solid #eaecf0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.rule-impact {
+  margin-top: 8px;
+}
+
+.rule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .agent-actions {
   display: flex;
   flex-wrap: wrap;
@@ -512,6 +577,7 @@
   .summary-band,
   .workspace-grid,
   .workflow-board,
+  .rule-flow,
   .sql-preview-grid,
   .report-grid,
   .report-lists {

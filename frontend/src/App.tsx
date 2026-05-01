@@ -9,6 +9,7 @@ import {
   CodeOutlined,
   DatabaseOutlined,
   DownloadOutlined,
+  ExperimentOutlined,
   FileSearchOutlined,
   PlusOutlined,
   RobotOutlined,
@@ -47,7 +48,7 @@ type PipelineItem = {
   artifact: string
 }
 
-type MenuKey = 'dashboard' | 'imports' | 'inventory' | 'workbench' | 'ai' | 'review' | 'execution'
+type MenuKey = 'dashboard' | 'imports' | 'inventory' | 'workbench' | 'ai' | 'rules' | 'review' | 'execution'
 
 type ViewMeta = {
   title: string
@@ -60,6 +61,15 @@ type WorkflowCheck = {
   detail: string
   done: boolean
   action: MenuKey
+}
+
+type RuleCandidate = {
+  id: string
+  source: string
+  title: string
+  condition: string
+  impact: string
+  status: 'CANDIDATE' | 'REVIEW_REQUIRED' | 'TEST_READY' | 'ENABLED'
 }
 
 type ProjectItem = {
@@ -398,6 +408,7 @@ const menuTargets: Record<MenuKey, string> = {
   inventory: 'section-inventory',
   workbench: 'section-workbench',
   ai: 'section-ai',
+  rules: 'section-rules',
   review: 'section-review',
   execution: 'section-execution',
 }
@@ -422,6 +433,10 @@ const viewMeta: Record<MenuKey, ViewMeta> = {
   ai: {
     title: 'AI 副驾驶',
     description: '查看本地 LLM、RAG、Agent、MCP 和 Skills 的运行状态。',
+  },
+  rules: {
+    title: '规则沉淀',
+    description: '把人工修改、AI 建议和执行修复沉淀成可审核、可测试、可启用的转换规则。',
   },
   review: {
     title: '审核中心',
@@ -949,6 +964,53 @@ function App() {
   const postgresTargets = (dataSources.data ?? []).filter((item) => item.kind === 'POSTGRESQL')
   const cloudProviderEnabled = (aiProviderConfigs.data ?? []).some((config) => config.type.includes('CLOUD') && config.enabled)
   const approvedReviewCount = workbenchSnapshot?.reviewRecords.filter((record) => record.decision === 'APPROVED').length ?? 0
+  const manualEditCount = workbenchSnapshot?.sqlVersions.filter((version) => version.source === 'MANUAL_EDIT').length ?? 0
+  const acceptedSuggestionCount = workbenchSnapshot?.aiSuggestions.filter((suggestion) => suggestion.status === 'ACCEPTED' || suggestion.status === 'APPLIED').length ?? 0
+  const ruleCandidateCount = manualEditCount + acceptedSuggestionCount
+  const ruleCandidates: RuleCandidate[] = useMemo(() => {
+    const candidates: RuleCandidate[] = []
+    if (manualEditCount > 0) {
+      candidates.push({
+        id: 'manual-edit-diff',
+        source: '人工编辑 SQL',
+        title: '从目标 SQL diff 抽取转换规则候选',
+        condition: '同类对象被重复人工修改，且修改前后能形成稳定 AST 差异',
+        impact: `${manualEditCount} 个人工编辑版本可分析`,
+        status: workbenchSnapshot?.baselineFrozen ? 'TEST_READY' : 'REVIEW_REQUIRED',
+      })
+    }
+    if (acceptedSuggestionCount > 0) {
+      candidates.push({
+        id: 'accepted-ai-suggestion',
+        source: '已接受 AI 建议',
+        title: '把已采纳建议转成规则草案和 fixture',
+        condition: 'AI 建议已被人工接受或编辑后应用，不能直接启用',
+        impact: `${acceptedSuggestionCount} 条建议可沉淀`,
+        status: 'CANDIDATE',
+      })
+    }
+    if (candidates.length === 0) {
+      return [
+        {
+          id: 'builtin-nvl',
+          source: '内置样例',
+          title: 'NVL(expr, default) -> COALESCE(expr, default)',
+          condition: '简单表达式可自动转换，嵌套函数和类型不一致时需要审核',
+          impact: '演示候选规则如何进入审核和测试',
+          status: 'ENABLED',
+        },
+        {
+          id: 'builtin-sysdate',
+          source: '内置样例',
+          title: 'SYSDATE -> CURRENT_TIMESTAMP',
+          condition: '涉及时区、DATE 语义或默认值表达式时标记风险',
+          impact: '演示规则命中后仍保留风险提示',
+          status: 'TEST_READY',
+        },
+      ]
+    }
+    return candidates
+  }, [acceptedSuggestionCount, manualEditCount, workbenchSnapshot?.baselineFrozen])
   const workflowChecks: WorkflowCheck[] = [
     {
       key: 'input',
@@ -991,6 +1053,13 @@ function App() {
       detail: migrationPlan ? `${migrationPlan.steps.length} 个执行步骤` : '绑定 PostgreSQL 目标数据源并执行 DDL',
       done: Boolean(migrationPlan),
       action: 'execution',
+    },
+    {
+      key: 'rules',
+      label: '沉淀规则候选',
+      detail: ruleCandidateCount > 0 ? `${ruleCandidateCount} 条来源可沉淀` : '从人工编辑、AI 采纳和执行修复中抽取规则',
+      done: ruleCandidateCount > 0,
+      action: 'rules',
     },
   ]
   const completedWorkflowCount = workflowChecks.filter((item) => item.done).length
@@ -1043,6 +1112,7 @@ function App() {
               { key: 'inventory', icon: <DatabaseOutlined />, label: '对象清单' },
               { key: 'workbench', icon: <CodeOutlined />, label: '转换工作台' },
               { key: 'ai', icon: <RobotOutlined />, label: 'AI 副驾驶' },
+              { key: 'rules', icon: <ExperimentOutlined />, label: '规则沉淀' },
               { key: 'review', icon: <AuditOutlined />, label: '审核中心' },
               { key: 'execution', icon: <BranchesOutlined />, label: '迁移计划' },
             ]}
@@ -1423,6 +1493,65 @@ function App() {
                   </Space>
                 </div>
               )}
+
+              <div id="section-rules" className={`panel wide view-panel ${isActiveView('rules', 'review') ? 'view-active' : ''}`}>
+                <div className="panel-header">
+                  <Space>
+                    <ExperimentOutlined />
+                    <Typography.Title level={5}>规则沉淀闭环</Typography.Title>
+                  </Space>
+                  <Tag color={ruleCandidateCount > 0 ? 'gold' : 'blue'}>
+                    {ruleCandidateCount > 0 ? `${ruleCandidateCount} 条待沉淀来源` : '演示链路'}
+                  </Tag>
+                </div>
+                <div className="rule-flow">
+                  {[
+                    ['1', '来源捕获', '人工编辑、AI 采纳、执行修复、校验差异'],
+                    ['2', '候选抽取', '从 SQL diff / 建议文本中提取可复用模式'],
+                    ['3', '人工审核', '确认适用条件、风险等级和自动化边界'],
+                    ['4', 'fixture 测试', '生成 input/output 样例并跑回归'],
+                    ['5', '启用命中', '规则版本化发布，重新转换同类 SQL'],
+                  ].map(([step, title, detail]) => (
+                    <div key={step} className="rule-flow-step">
+                      <span>{step}</span>
+                      <strong>{title}</strong>
+                      <small>{detail}</small>
+                    </div>
+                  ))}
+                </div>
+                <div className="rule-candidate-list">
+                  {ruleCandidates.map((candidate) => (
+                    <div key={candidate.id} className="rule-candidate">
+                      <Space className="preview-title" align="start">
+                        <Space direction="vertical" size={2}>
+                          <Typography.Text strong>{candidate.title}</Typography.Text>
+                          <Typography.Text type="secondary">{candidate.source} / {candidate.condition}</Typography.Text>
+                        </Space>
+                        <Tag color={candidate.status === 'ENABLED' ? 'green' : candidate.status === 'TEST_READY' ? 'blue' : 'gold'}>
+                          {candidate.status}
+                        </Tag>
+                      </Space>
+                      <div className="rule-impact">
+                        <Typography.Text type="secondary">{candidate.impact}</Typography.Text>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rule-actions">
+                  <Button size="small" onClick={() => switchView('workbench')}>查看人工编辑来源</Button>
+                  <Button size="small" onClick={() => switchView('ai')}>查看 AI 建议来源</Button>
+                  <Button size="small" type="primary" disabled={ruleCandidateCount === 0}>
+                    生成规则候选
+                  </Button>
+                </div>
+                <Alert
+                  className="inline-alert"
+                  type="info"
+                  showIcon
+                  message="规则不会自动生效"
+                  description="候选规则必须经过人工审核、fixture 回归测试和版本化启用，AI 只能生成草案和说明。"
+                />
+              </div>
 
               {workbenchSnapshot && (
                 <div id="section-review" className={`panel view-panel ${isActiveView('review') ? 'view-active' : ''}`}>
