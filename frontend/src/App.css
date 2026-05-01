@@ -76,13 +76,28 @@
   margin-bottom: 16px;
 }
 
-.summary-band h5 {
-  margin: 4px 0 0;
-}
-
-.summary-band .ant-pro-card {
+.metric-card {
+  background: #ffffff;
   border: 1px solid #eaecf0;
   border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+  min-height: 122px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.metric-card strong {
+  color: #101828;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.1;
+}
+
+.metric-card-wide strong {
+  font-size: 34px;
 }
 
 .status-alert {
@@ -302,6 +317,16 @@
 .editor-pane .ant-typography {
   display: block;
   padding: 8px 10px;
+}
+
+.editor-loading {
+  align-items: center;
+  background: #f8fafc;
+  color: #667085;
+  display: flex;
+  font-size: 13px;
+  height: 260px;
+  justify-content: center;
 }
 
 .risk-strip {

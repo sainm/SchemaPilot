@@ -15,14 +15,14 @@ import {
   SafetyCertificateOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
-import Editor from '@monaco-editor/react'
-import { StatisticCard } from '@ant-design/pro-components'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Button, ConfigProvider, Input, Layout, Menu, Progress, Select, Space, Table, Tag, Typography, Upload } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import axios from 'axios'
 import './App.css'
+
+const SqlEditor = lazy(() => import('@monaco-editor/react'))
 
 type HealthPayload = {
   service: string
@@ -1077,32 +1077,23 @@ function App() {
             </div>
 
             <section id="section-dashboard" className={`summary-band view-panel ${isActiveView('dashboard') ? 'view-active' : ''}`}>
-              <StatisticCard
-                statistic={{
-                  title: '闭环完成度',
-                  value: closedLoopPercent,
-                  suffix: '%',
-                }}
-                chart={<Progress percent={closedLoopPercent} strokeColor="#1677ff" showInfo={false} />}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '兼容性评分',
-                  value: generatePrecheck.data?.analysis.compatibilityScore ?? analyzeSql.data?.compatibilityScore ?? '未计算',
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '下一步',
-                  value: nextWorkflowCheck.done ? '闭环可复查' : nextWorkflowCheck.label,
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: 'AI / RAG',
-                  value: mcpStatus.data ? '已接入' : '待连接',
-                }}
-              />
+              <div className="metric-card metric-card-wide">
+                <Typography.Text type="secondary">闭环完成度</Typography.Text>
+                <strong>{closedLoopPercent}%</strong>
+                <Progress percent={closedLoopPercent} strokeColor="#1677ff" showInfo={false} />
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">兼容性评分</Typography.Text>
+                <strong>{generatePrecheck.data?.analysis.compatibilityScore ?? analyzeSql.data?.compatibilityScore ?? '未计算'}</strong>
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">下一步</Typography.Text>
+                <strong>{nextWorkflowCheck.done ? '闭环可复查' : nextWorkflowCheck.label}</strong>
+              </div>
+              <div className="metric-card">
+                <Typography.Text type="secondary">AI / RAG</Typography.Text>
+                <strong>{mcpStatus.data ? '已接入' : '待连接'}</strong>
+              </div>
             </section>
 
             <Alert
@@ -1228,27 +1219,31 @@ function App() {
                         <div className="sql-preview-grid">
                           <div className="editor-pane">
                             <Typography.Text type="secondary">Oracle 原始 SQL</Typography.Text>
-                            <Editor
-                              height="260px"
-                              defaultLanguage="sql"
-                              value={selectedStatement.originalSql}
-                              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
-                            />
+                            <Suspense fallback={<div className="editor-loading">加载 SQL 编辑器...</div>}>
+                              <SqlEditor
+                                height="260px"
+                                defaultLanguage="sql"
+                                value={selectedStatement.originalSql}
+                                options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+                              />
+                            </Suspense>
                           </div>
                           <div className="editor-pane">
                             <Typography.Text type="secondary">PostgreSQL 目标 SQL</Typography.Text>
-                            <Editor
-                              height="260px"
-                              defaultLanguage="sql"
-                              value={targetSqlDraft}
-                              onChange={(value) => {
-                                setTargetSqlDraftByStatement((current) => ({
-                                  ...current,
-                                  [selectedStatement.index]: value ?? '',
-                                }))
-                              }}
-                              options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
-                            />
+                            <Suspense fallback={<div className="editor-loading">加载 SQL 编辑器...</div>}>
+                              <SqlEditor
+                                height="260px"
+                                defaultLanguage="sql"
+                                value={targetSqlDraft}
+                                onChange={(value) => {
+                                  setTargetSqlDraftByStatement((current) => ({
+                                    ...current,
+                                    [selectedStatement.index]: value ?? '',
+                                  }))
+                                }}
+                                options={{ minimap: { enabled: false }, fontSize: 13, wordWrap: 'on' }}
+                              />
+                            </Suspense>
                           </div>
                         </div>
                         {(selectedStatement.risks.length > 0 || selectedStatement.parseIssues.length > 0) && (
