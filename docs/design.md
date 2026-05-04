@@ -7,15 +7,15 @@ SchemaPilot 要做成 **Oracle 到 PostgreSQL 的可视化迁移评估、转换�
 关键设计决策：
 
 - 后端采用 **Java 25 + Spring Boot 4.x + 虚拟线程**，适合大量 JDBC 和文件 I/O。
-- 架构先做 **模块化单体**，模块边界清楚，后续再拆 worker。
-- 所有输入统一进入 **资产模型**：直连 Oracle、SQL 文件、Data Pump SQLFILE、手工 SQL、数据文件。
+- 后端采用 **Gradle 多模块单体**：运行时仍是一个 Spring Boot 应用，开发期按迁移能力拆 module，模块边界清楚，后续再拆 worker。
+- 所有输入统一进入 **资产模型**：直连 Oracle、客户导出的文件夹/工程/zip、Data Pump SQLFILE、单文件、手工 SQL、应用工程 SQL、目标 PostgreSQL 反扫。
 - SQL/PLSQL 转换分成两类：**可确定转换** 和 **辅助转换草稿**。
 - PL/SQL、package、复杂 trigger 不承诺 100% 自动正确，必须进入风险和审核闭环。
 - 预处理报告是核心门禁：**未审核通过，不允许正式执行**。
 - 数据迁移走 PostgreSQL `COPY FROM STDIN`，配合 Oracle 流式读取、大表分片、虚拟线程并发、连接池限流。
-- 大数据迁移缓冲使用 **Java 25 FFM API** 控制堆外内存，避免大批量 COPY、LOB、文件解析把 Java heap 打爆。
+- 大数据迁移缓冲第一版先使用有界 heap / direct buffer；**Java 25 FFM API** 作为 P1/P2 压测驱动的性能增强，通过特性开关灰度启用。
 - 用户手工编辑后的目标 SQL 是执行基线，平台保存版本、diff、审核记录。
-- AI 定位为 **迁移副驾驶**：负责解释、建议、生成草稿、诊断错误，不直接绕过规则引擎和审核执行 SQL。
+- AI 定位为 **项目级迁移智能层**：负责理解资产、规划波次、分析对象簇、生成改写草稿、诊断失败；规则、工具验证和人工审核负责兜底。
 - 第一版优先做评估、转换、报告、审核；数据高速迁移作为第二个大闭环推进。
 
 ## 2. 产品定位
@@ -37,16 +37,17 @@ SchemaPilot 的价值不是说“我能自动迁完所有 Oracle”，而是：
 
 | 闭环 | 输入 | 平台动作 | 产物 | 门禁 | 下一步 |
 |---|---|---|---|---|---|
-| 资产闭环 | 直连 Oracle、SQL 文件、手工 SQL | 采集、切分、识别、建模 | 统一对象清单 | 对象可追溯到来源 | 转换和风险 |
+| 资产闭环 | 直连 Oracle、文件夹/工程/zip、单文件、手工 SQL、应用工程 SQL、目标 PG | 采集、切分、识别、建模、缺失信息标记 | 统一对象清单和来源清单 | 对象可追溯到来源 | 依赖图、转换和风险 |
 | 转换闭环 | 对象清单、规则配置 | 规则转换、AI 建议、人工编辑 | 目标 SQL 基线 | 用户确认目标 SQL | 报告 |
 | 评审闭环 | 风险、目标 SQL、依赖、统计 | 生成预处理报告、审核 | 已审核报告快照 | 审核通过或有条件通过 | 计划 |
 | 执行闭环 | 已审核 SQL 基线、迁移计划 | 执行 DDL、迁移数据、重试 | 执行日志和任务状态 | 失败项清零或豁免 | 校验 |
-| 校验闭环 | 源库、目标库、执行结果 | 行数、抽样、checksum、对象校验 | 校验报告 | 差异处理完成 | 最终归档和规则沉淀 |
+| 校验闭环 | 源库、目标库、执行结果 | 行数、抽样、checksum、对象校验 | 校验报告 | 差异处理完成 | 最终归档和问题回流 |
 
 闭环原则：
 
 - 每一步都保存版本和审计记录。
 - 每个产物都能追溯到输入来源。
+- 每个阶段都能生成阶段报告快照并导出；阶段报告用于沟通和审计，不一定都是执行门禁。
 - AI 建议必须进入“接受、忽略、编辑”的决策链。
 - 审核通过的报告和 SQL 基线冻结后，才能进入正式执行。
 - 执行失败和校验失败必须回流到转换工作台或迁移计划，而不是停在错误日志里。
@@ -55,15 +56,74 @@ SchemaPilot 的价值不是说“我能自动迁完所有 Oracle”，而是：
 
 ### 3.1 输入来源
 
-| 输入来源 | 第一版支持策略 |
-|---|---|
-| Oracle 直连 | 支持，采集元数据、对象 DDL、PL/SQL 源码 |
-| `.sql` 文件 | 支持，解析 DDL 和 PL/SQL 块；DML/INSERT 第一版保留原文并标记为不可直接执行的待处理 SQL |
-| Data Pump SQLFILE | 支持，用户先用 `impdp SQLFILE=xxx.sql` 导出 |
-| 手工 SQL | 支持，走同一套解析和转换流程 |
-| INSERT 脚本 | 第一版不自动执行；作为输入源保留原文、生成风险/待处理项，后续进入数据迁移或专用导入闭环 |
-| CSV/Excel | 第二阶段支持，用于数据导入 |
-| `.dmp` 文件 | 第一版不直接解析，提供操作向导 |
+| 输入来源 | 支持阶段 | 策略 |
+|---|---|---|
+| 手工 SQL | P0 | 走同一套解析、转换、风险和审核流程 |
+| 单个 `.sql` 文件 | P0 | 解析 DDL 和 PL/SQL 块；DML/INSERT 保留原文并标记为不可直接执行的待处理 SQL |
+| 文件夹 / 工程 / zip | P0 | 可一次导入多个工程包；递归读取 SQL/DDL/PLSQL/Data Pump SQLFILE/说明文件，保留工程名、路径、顺序、checksum 和 schema guess |
+| Data Pump SQLFILE | P0 | 用户先用 `impdp SQLFILE=xxx.sql` 导出，平台按 SQL 文件处理 |
+| 单独文件输入 | P0 | 作为轻量入口，可快速分析并选择加入项目 |
+| Oracle 直连 | P1 | 采集元数据、对象 DDL、PL/SQL 源码、依赖、统计、NLS/版本信息 |
+| 应用工程 SQL | P2/P3 | 支持多个应用工程；扫描 MyBatis XML、Java 字符串 SQL、配置文件、脚本、报表 SQL |
+| 目标 PostgreSQL 反扫 | P2/P3 | 读取已存在目标对象，用于 gap analysis、二次迁移和校验 |
+| INSERT 脚本 | P3 | 不进入 P0 DDL 基线执行链路；后续进入专用数据导入闭环 |
+| CSV/Excel | P3 | 用于数据导入 |
+| `.dmp` 文件 | 暂缓 | 不直接解析，提供操作向导 |
+
+### 3.1.1 输入模式
+
+入口可以轻重不同，但进入系统后必须进入同一套扫描、建模、风险和报告链路。轻量工作台不强制生成完整依赖图和迁移波次，大项目评估才进入完整依赖图、风险地图和波次规划。
+
+| 模式 | 适用场景 | 入口 | 输出 |
+|---|---|---|---|
+| Quick Check | 小 SQL、临时验证 | 手工 SQL、单文件 | 对象识别、风险、改写建议 |
+| Workbench | 多工程/多文件人工改造 | 多工程、多文件夹、多 zip | 工程树、来源树、对象清单、轻量资产模型、基础依赖、风险聚合、转换工作台、预处理报告 |
+| Project Assessment | 大项目评估 | 直连 Oracle、客户导出多工程 | 工程分组、完整资产模型、完整依赖图、风险地图、迁移波次建议、人工工作量评估 |
+| Migration Execution | 已审核迁移 | SQL 基线、源/目标库 | 迁移计划、执行日志、校验报告 |
+
+多工程、文件夹/工程/zip 输入必须保留：
+
+- 工程 ID、工程名称、工程类型，例如 `DATABASE_EXPORT`、`APPLICATION_SQL`、`MANUAL_BATCH`、`TARGET_POSTGRES`。
+- 原始路径和相对路径。
+- 文件类型和解析器选择。
+- 文件 checksum。
+- 语句在文件中的位置。
+- 对象来源和 schema 推断依据。
+- 缺失元数据标记，例如 row count、依赖、权限、NLS 信息无法从文件得出时必须显式标记。
+
+### 3.1.2 输入预检
+
+所有文件、文件夹和 zip 输入在进入解析前必须先经过预检。预检失败不能进入对象模型，只能生成输入问题。
+
+预检内容：
+
+- 最大单文件大小和批次总大小。
+- zip bomb 检测，包括压缩比、展开文件数、展开后总大小。
+- 非法路径拦截，例如 `../`、绝对路径、隐藏控制字符。
+- 文件类型和扩展名白名单。
+- 编码识别和不可识别编码提示。
+- 重复文件 checksum 标记。
+- 空文件、二进制文件、明显非 SQL 文件识别。
+- Data Pump SQLFILE 的来源声明和导出参数提示。
+
+### 3.1.3 多工程范围
+
+一个 SchemaPilot 迁移项目可以包含多个工程单元。工程单元不是独立迁移项目，而是同一迁移项目内的来源分组，用于分区扫描、过滤、报告和回流。
+
+典型组合：
+
+- 多个数据库导出工程：不同 schema、不同业务域或不同客户交付包。
+- 数据库导出工程 + 应用 SQL 工程：数据库对象和 MyBatis/Java/报表 SQL 同时评估。
+- 多个 zip 包：客户按模块分包交付，平台需要统一建模和汇总报告。
+- 源端工程 + 目标 PostgreSQL 反扫工程：用于差异分析和二次迁移。
+
+多工程规则：
+
+- 每个 `InputSource` 必须归属一个工程单元。
+- 对象清单、风险、转换结果、报告都必须支持按工程过滤和汇总。
+- 同名对象必须记录工程来源和 schema，不能只靠对象名合并。
+- 跨工程依赖应标记为 `CROSS_SOURCE_DEPENDENCY`，轻量 Workbench 只提示，大项目评估再进入完整依赖分析。
+- 阶段报告必须支持单工程导出和全项目汇总导出。
 
 ### 3.2 数据库对象
 
@@ -85,24 +145,55 @@ SchemaPilot 的价值不是说“我能自动迁完所有 Oracle”，而是：
 | Comment | 自动转换 |
 | Partition | 评估和草稿转换，复杂分区标风险 |
 
+### 3.3 明确不支持与需人工处理矩阵
+
+第一版必须把“不支持、只识别、只给草稿、可自动转换”写清楚，避免用户把平台误解成全自动迁移器。
+
+| 能力 | MVP 处理方式 | 说明 |
+|---|---|---|
+| `.dmp` 直接解析 | 暂不支持 | 提供 Data Pump SQLFILE 操作向导，平台读取 SQLFILE |
+| 完整 package 自动转换 | 不承诺 | 识别 spec/body、依赖和风险，生成拆解建议 |
+| 动态 SQL 语义等价判断 | 人工处理 | 平台只能定位片段、解释风险、给草稿 |
+| autonomous transaction | 人工处理 | 标记 HIGH/BLOCKER，进入 work item |
+| DB link、AQ、Scheduler、Job | 只识别和风险提示 | 需要迁移策略人工确认 |
+| 复杂物化视图刷新策略 | 只生成评估 | 不直接生成可执行刷新方案 |
+| UDT、XMLTYPE、空间类型 | 只标风险 | 后续按行业样本补规则 |
+| 分区完全等价迁移 | 草稿级 | 默认不承诺 Oracle 分区语义完全等价 |
+
+### 3.4 版本兼容矩阵
+
+项目必须保存源端和目标端版本，并在报告中说明规则适用范围。MVP 文档和测试 fixture 先按下列基线写验收：
+
+| 组件 | 基线 | 说明 |
+|---|---|---|
+| Oracle | 11g / 12c / 19c 作为样本矩阵 | 直连能力在 P1 补齐；文件输入需保存来源声明 |
+| PostgreSQL | 15 / 16 / 17 作为样本矩阵 | 目标语法预检和执行计划按版本生成差异 |
+| Java | 25 | 使用虚拟线程；FFM 为后续性能增强 |
+| Spring Boot | 4.x | 运行时一个 app，多模块开发 |
+
 ## 4. 总体流程
 
 ```mermaid
 flowchart LR
   A["输入源"] --> B["导入与采集"]
   B --> C["解析与资产建模"]
-  C --> D["转换与风险识别"]
-  D --> E["预处理报告"]
-  E --> F["人工审核"]
-  F --> G["迁移计划"]
-  G --> H["执行引擎"]
-  H --> I["迁移后校验"]
-  I --> J["最终报告"]
+  C --> D["依赖图构建"]
+  D --> E["项目级风险和 AI 分析"]
+  E --> F["转换与改写工作台"]
+  F --> G["预处理报告"]
+  G --> H["人工审核"]
+  H --> I["迁移计划"]
+  I --> J["执行引擎"]
+  J --> K["迁移后校验"]
+  K --> L["最终报告"]
 
   A1["Oracle 直连"] --> A
-  A2["SQL / DDL / PL/SQL 文件"] --> A
+  A2["多工程 / 文件夹 / zip"] --> A
   A3["手工 SQL"] --> A
-  A4["CSV / Excel / INSERT 文件（P3）"] -.-> A5["专用数据导入闭环"]
+  A4["单文件"] --> A
+  A5["应用工程 SQL（P2/P3）"] -.-> A
+  A6["目标 PG 反扫（P2/P3）"] -.-> A
+  A7["CSV / Excel / INSERT 文件（P3）"] -.-> A8["专用数据导入闭环"]
 ```
 
 ### 4.1 P0 闭环：评估转换闭环
@@ -111,7 +202,7 @@ P0 不追求完成真实生产迁移，而是必须让一个对象从输入到�
 
 ```mermaid
 flowchart LR
-  A["手工 SQL / SQL 文件"] --> B["语句切分"]
+  A["手工 SQL / 单文件 / 多工程 / 文件夹 / zip"] --> B["语句切分"]
   B --> C["对象识别"]
   C --> D["规则转换"]
   D --> E["风险识别"]
@@ -125,7 +216,9 @@ flowchart LR
 
 P0 的闭环验收：
 
-- 输入可以是手工 SQL 或 SQL 文件。
+- 输入可以是手工 SQL、单文件、单工程、多工程、文件夹或 zip。
+- 多工程、文件夹/zip 输入能形成工程树和来源树，并能追溯到工程、文件路径和语句位置。
+- P0 依赖图只要求覆盖文件和手工输入识别出的基础对象关系；Oracle 直连依赖采集属于 P1。
 - 解析失败的片段不会丢失，必须形成 `ParseIssue`。
 - 每个识别出的对象都能看到原始 SQL、目标 SQL、风险、AI 建议和人工编辑记录。
 - 用户编辑后的目标 SQL 成为导出基线。
@@ -156,22 +249,22 @@ P1 的闭环验收：
 - 数据迁移失败能定位到表、批次或 shard。
 - 校验失败能形成差异项，并能回流为待处理问题。
 
-### 4.3 P2 闭环：规则沉淀闭环
+### 4.3 P2 闭环：迁移策略候选回流
 
-P2 开始把项目经验沉淀成平台能力。
+P2 开始把审核和校验确认过的处理方式回流为项目策略候选。它服务迁移执行，不做与当前迁移无关的内容沉淀。
 
 ```text
 人工修正 SQL
   -> 审核通过
   -> 执行成功
   -> 校验通过
-  -> AI 建议抽取通用模式
-  -> 用户确认生成规则
-  -> 规则进入规则库
-  -> 后续项目自动应用
+  -> AI 建议抽取项目策略候选
+  -> 用户确认适用范围
+  -> 策略进入当前项目或项目模板
+  -> 后续同类对象可提示或自动命中
 ```
 
-规则沉淀必须人工确认，不能由 AI 自动写入生效规则。
+策略候选必须人工确认适用范围，不能由 AI 自动写入全局生效规则。
 
 ### 4.4 P3 闭环：DML/INSERT 文件导入闭环
 
@@ -231,7 +324,7 @@ flowchart LR
 门禁要求：
 
 - 未配置 execution slot 与连接池容量关系时，不允许开启高并发迁移。
-- FFM hard watermark 未配置时，不允许开启 LOB/大表高并发 COPY。
+- FFM hard watermark 未配置时，不允许开启 FFM 模式下的 LOB/大表高并发 COPY。
 - 未完成 Sequence Reset 计划时，不允许进入业务切换。
 - 未生成 Undo Script 时，不允许正式执行高风险 DDL plan。
 - 大型 PL/SQL 未完成 AST outline/slice 时，AI 只能给出风险摘要，不能生成可执行改造草案。
@@ -253,11 +346,29 @@ stateDiagram-v2
   Rejected --> Analyzed
   Approved --> Planned
   Planned --> Executing
+  Planned --> Cancelled
+  Planned --> Paused
+  Paused --> Planned
   Executing --> Validating
+  Executing --> Paused
+  Executing --> Cancelled
   Validating --> Completed
+  Validating --> Failed
   Executing --> Failed
   Failed --> Planned
+  Analyzed --> Stale
+  ReportReady --> Stale
+  Approved --> Stale
+  Planned --> Stale
+  Stale --> Analyzing
 ```
+
+状态补充：
+
+- `Stale`：输入批次、对象、规则、目标 SQL、报告或审核基线发生上游变化，下游报告、AI 建议、Migration Plan 和 SQL 包都必须失效。
+- `Paused`：执行或计划被用户暂停，保留 checkpoint 和当前产物版本。
+- `Cancelled`：用户主动取消，不允许继续复用旧计划执行，只能重新生成计划。
+- `Failed`：执行或校验失败，必须生成 work item 并回流。
 
 ### 5.2 对象状态
 
@@ -270,9 +381,12 @@ IMPORTED
   -> PLANNED
   -> EXECUTED
   -> VALIDATED
+  -> STALE
 ```
 
 对象可以停在任意状态。比如 package 可以停在 `CONVERTED`，但标记为 `MANUAL_REQUIRED`，等待开发人工处理。
+
+风险和待处理问题支持 `WAIVED`，但豁免不是删除风险。`WAIVED` 必须记录豁免人、理由、有效范围、过期条件和关联报告版本；对象、规则或 SQL 变化后，相关豁免必须重新确认。
 
 ## 6. 技术架构
 
@@ -291,11 +405,12 @@ IMPORTED
 ### 6.2 后端
 
 - Java 25
+- Gradle Kotlin DSL multi-project
 - Spring Boot 4.x
 - Spring MVC
-- Spring Security
-- Spring Batch
-- Java FFM API：`MemorySegment`、`Arena`、`MemoryLayout`，用于受控堆外缓冲。
+- Spring Security：P1 起补齐角色、权限和审批人策略；P0 先保留单用户/开发模式门禁。
+- Spring Batch：不进入 P0 主链路，是否引入需要 ADR；P0 先用自研轻量任务表和状态机。
+- Java FFM API：P1/P2 性能增强，使用 `MemorySegment`、`Arena`、`MemoryLayout` 做受控堆外缓冲，默认由特性开关控制。
 - PostgreSQL JDBC
 - Oracle JDBC Thin Driver
 - PostgreSQL CopyManager
@@ -317,19 +432,26 @@ spring:
 
 ## 7. 后端模块
 
+后端不是一个单 Gradle project 里按 package 随意分层，而是一个 Gradle multi-project。运行时只启动 `app` 一个 Spring Boot 应用；其他模块是 Java library module，由 `app` 依赖并装配。
+
 ```text
 backend
-  project        项目管理
+  app            Spring Boot 启动、配置、模块装配、全局 Web 入口
+  common         ApiResponse、异常、基础工具、通用审计类型
+  project        迁移项目、工程单元 SourceProject、项目策略、项目状态
   datasource     数据源、连接测试、凭据管理
-  ingest         直连、文件、手工 SQL 输入
-  metadata       Oracle 资产扫描
-  parser         SQL / PL/SQL 解析
-  model          统一资产模型
-  converter      转换引擎
-  ai             AI 副驾驶、上下文构建、建议管理
-  risk           风险识别与评分
-  report         预处理报告、最终报告
-  review         审核流程
+  input          手工 SQL、多文件、文件夹、zip、导入批次
+  metadata       Oracle / PostgreSQL 资产扫描
+  parser         SQL / PL/SQL 切分、解析、对象识别
+  model          统一资产模型、来源追踪、对象版本
+  dependency     基础依赖、跨工程依赖、完整依赖图和对象簇
+  rule           规则定义、规则命中、规则说明
+  convert        Oracle -> PostgreSQL 转换引擎
+  ai             AI 迁移智能层、迁移上下文构建、建议管理
+  risk           风险识别与评分，支持按工程过滤和汇总
+  report         阶段报告、预处理报告、执行报告、校验报告、最终归档报告
+  review         审核流程和门禁
+  export         SQL 包导出
   planner        迁移计划生成
   executor       DDL 和数据执行
   validator      迁移后校验
@@ -338,16 +460,58 @@ backend
   audit          审计日志
 ```
 
+MVP 必须先拆出的模块：
+
+```text
+app, common, project, input, parser, model, dependency, rule, convert, ai, risk, report, review, export
+```
+
+P1/P2 再补齐：
+
+```text
+datasource, metadata, planner, executor, validator, realtime, security, audit
+```
+
+模块依赖方向：
+
+```text
+app
+  -> common
+  -> project/input/parser/model/dependency/rule/convert/ai/risk/report/review/export
+
+input -> project + common
+parser -> model + common
+dependency -> model + common
+rule -> model + common
+convert -> model + rule + common
+risk -> model + rule + dependency + common
+ai -> model + dependency + rule + convert + risk + common
+report -> project + model + dependency + rule + convert + ai + risk + common
+review -> report + common
+export -> review + convert + common
+```
+
+约束：
+
+- `app` 只负责启动、配置和装配，不承载业务逻辑。
+- 业务模块不能反向依赖 `app`。
+- `common` 不能依赖业务模块。
+- `report` 不能依赖 `review`，避免和 `review -> report` 形成 Gradle 循环。Review Report 由 `review` 读取报告快照和审核记录生成，或由 `app` 编排导出。
+- 模块之间只通过公开 service、DTO 或 domain type 协作，禁止跨模块直接访问内部实现类。
+- Flyway 脚本第一阶段仍集中在 `app`，等模型稳定后再评估是否按模块拆 migration。
+
 ## 8. 统一资产模型
 
-所有来源都转成统一模型，避免“直连一套逻辑、文件一套逻辑、手工输入一套逻辑”。
+所有来源都转成统一模型，避免“直连一套逻辑、文件一套逻辑、手工输入一套逻辑”。多工程场景下，`Project` 是一次迁移工作的总容器，`SourceProject` 是该项目下的工程单元，`InputSource` 是工程单元里的具体输入来源。
 
 核心实体：
 
 ```text
 Project
+SourceProject
 DatasourceConfig
 InputSource
+InputBatch
 DbObject
 DbColumn
 DbConstraint
@@ -364,41 +528,76 @@ ConversionResult
 AiSuggestion
 AiConversation
 PromptTemplate
+StageReport
 PrecheckReport
 ReviewRecord
 MigrationPlan
 MigrationTask
+ExecutionReport
 ValidationReport
+FinalArchiveReport
 AuditLog
 ```
+
+核心层级：
+
+```text
+Project
+  -> SourceProject
+    -> InputSource / InputBatch
+      -> DbObject
+        -> ConversionResult / RiskIssue / ObjectDependency
+```
+
+`SourceProject` 用于表达客户交付的多个工程包或扫描来源：
+
+- `DATABASE_EXPORT`：数据库对象导出工程，例如 Data Pump SQLFILE、DDL/PLSQL 文件夹。
+- `APPLICATION_SQL`：应用侧 SQL 工程，例如 MyBatis XML、Java 字符串 SQL、报表 SQL。
+- `MANUAL_BATCH`：手工 SQL 或临时验证批次。
+- `TARGET_POSTGRES`：目标 PostgreSQL 反扫工程。
+
+`InputBatch` 用于表达一次导入动作，例如一次 zip 上传、一次文件夹扫描、一次直连扫描快照。一个工程单元可以有多个批次，便于增量补充和重新扫描。
 
 ### 8.1 核心产物链路
 
 闭环是否成立，关键看产物是否能串起来。
 
 ```text
-InputSource
+SourceProject
+  -> InputSource
   -> DbObject
   -> ParseIssue / RiskIssue
   -> ConversionResult
   -> AiSuggestion
   -> EditedSqlVersion
+  -> StageReport
   -> PrecheckReport
   -> ReviewRecord
   -> MigrationPlan
   -> MigrationTask
+  -> ExecutionReport
   -> ValidationReport
-  -> FinalArchive
+  -> FinalArchiveReport
 ```
 
 每个产物必须至少记录：
 
 - `project_id`：归属项目。
+- `source_project_id`：归属工程单元；单 SQL、单文件也使用默认工程单元。
 - `source_id` 或 `object_id`：来源。
+- `input_batch_id`：归属导入批次，便于追踪 zip、文件夹扫描或直连扫描快照。
 - `version`：版本。
 - `status`：状态。
 - `created_by` / `created_at`：审计。
 - `input_hash`：用于判断报告或建议是否过期。
+
+多工程建模规则：
+
+- `DbObject` 不能只用对象名做唯一性判断，必须包含 `project_id`、`source_project_id`、schema、object type 和规范化名称。
+- 文件输入对象必须保存文件路径、语句位置和 checksum。
+- 直连扫描对象必须保存 owner、object name、Oracle object type 和采集快照。
+- 跨工程依赖必须落为 `ObjectDependency`，并标记 `CROSS_SOURCE_DEPENDENCY`。
+- 阶段报告、风险、转换结果、审核记录必须支持单工程过滤和全项目汇总。
 
 ### 8.2 SQL 基线模型
 
@@ -482,6 +681,20 @@ SQL 解析不能只靠 `;` 分割，因为 PL/SQL 内部也有分号。
 
 这点很重要：**解析失败不等于流程失败**。
 
+### 10.1 导入批次对比
+
+同一工程单元可能多次上传 zip、文件夹或 SQL 文件。平台必须支持批次对比，避免用户重新交付后不知道变化点。
+
+批次对比至少包含：
+
+- 新增文件、删除文件、内容变化文件。
+- 新增对象、删除对象、SQL hash 变化对象。
+- schema guess 或对象类型变化。
+- 新增风险、消失风险、风险等级变化。
+- 受影响的转换结果、报告和审核状态。
+
+如果新批次改变了对象、风险或目标 SQL，相关报告和 SQL 基线必须标记为过期。
+
 ## 11. 转换引擎
 
 转换引擎分层：
@@ -520,22 +733,42 @@ Renderer
 
 常见映射：
 
-| Oracle | PostgreSQL |
-|---|---|
-| `VARCHAR2(n)` | `varchar(n)` |
-| `NVARCHAR2(n)` | `varchar(n)` |
-| `NUMBER(10,0)` | `integer` |
-| `NUMBER(19,0)` | `bigint` |
-| `NUMBER(p,s)` | `numeric(p,s)` |
-| `NUMBER` | `numeric`，标记精度风险 |
-| `DATE` | `timestamp`，标记语义风险 |
-| `TIMESTAMP` | `timestamp` |
-| `CLOB` | `text` |
-| `BLOB` | `bytea` |
-| `RAW` | `bytea` |
-| `NVL(a,b)` | `COALESCE(a,b)` |
-| `SYSDATE` | `CURRENT_TIMESTAMP` |
-| `sequence.NEXTVAL` | `nextval('sequence')` |
+| Oracle | PostgreSQL 默认策略 | 说明 |
+|---|---|---|
+| `VARCHAR2(n)` | `varchar(n)` | 空字符串与 NULL 语义差异必须标风险 |
+| `NVARCHAR2(n)` | `varchar(n)` | 需要记录源端字符集 / NLS 信息 |
+| `NUMBER(p,0)` | `numeric(p,0)` | 不按位数默认降为 `integer` 或 `bigint` |
+| `NUMBER(10,0)` | `numeric(10,0)` | 只有值域 profile 证明落在 `integer` 范围内，才给 `integer` 候选 |
+| `NUMBER(19,0)` | `numeric(19,0)` | 只有值域 profile 证明落在 `bigint` 范围内，才给 `bigint` 候选 |
+| `NUMBER(p,s)` | `numeric(p,s)` | 保留精度和 scale |
+| `NUMBER` | `numeric` | 标记精度风险 |
+| `DATE` | `timestamp` | 标记语义风险；Oracle `DATE` 含日期和时间 |
+| `TIMESTAMP` | `timestamp` | 按目标版本检查 fractional seconds |
+| `CLOB` | `text` | LOB 数据迁移进入专用测试 |
+| `BLOB` | `bytea` | LOB 数据迁移进入专用测试 |
+| `RAW` | `bytea` | 检查长度和编码 |
+| `NVL(a,b)` | `COALESCE(a,b)` | 需检查类型提升差异 |
+| `SYSDATE` | 生成候选并要求确认 | 不能默认写死为 `CURRENT_TIMESTAMP`；长事务或默认值场景可能需要 `clock_timestamp()`、statement timestamp 或应用侧时间 |
+| `sequence.NEXTVAL` | `nextval('sequence')` | 执行计划必须包含 sequence reset |
+
+类型和时间规则要求：
+
+- 任何从 `numeric` 收窄到 `integer` / `bigint` 的建议都必须带值域证据、风险说明和人工确认，不得作为无条件 AUTO。
+- `SYSDATE`、`SYSTIMESTAMP`、`CURRENT_DATE`、`CURRENT_TIMESTAMP` 等时间函数必须区分“事务开始时间、语句时间、真实当前时间、数据库服务器时区”四类语义。
+- Oracle 空字符串等价 NULL 的差异必须进入转换规则和 COPY/DML 数据写入策略；默认策略为 `ORACLE_EMPTY_STRING_AS_NULL`，但报告必须列出受影响字段和 SQL。
+- Sequence 转换只解决对象创建，不代表游标位置正确；数据导入后必须执行 sequence reset。
+
+### 11.1 PostgreSQL 语法预检
+
+P0 不执行 DDL，但需要尽早发现目标 SQL 明显不可用的问题。转换工作台应提供 PostgreSQL 语法预检能力：
+
+- 对目标 SQL 做 PostgreSQL 方言语法检查。
+- 检查 identifier 是否需要引用或存在非法字符。
+- 检查明显不支持的 Oracle 语法残留。
+- 检查多语句顺序是否缺少依赖对象。
+- 预检结果进入风险和待处理问题，不直接阻止用户编辑。
+
+P0 可以先使用轻量 parser 和规则检查；P1 接入目标 PostgreSQL 后，再增加 dry-run 或事务内 rollback 校验。
 
 ## 12. PL/SQL 策略
 
@@ -623,8 +856,10 @@ package 不当成“自动转换对象”，而当成“改造单元”。
 典型风险：
 
 - `NUMBER` 无精度。
+- `NUMBER(10,0)` / `NUMBER(19,0)` 被错误收窄到 `integer` / `bigint`。
 - Oracle 空字符串等价 NULL。
 - `DATE` 包含时间。
+- `SYSDATE` 与 PostgreSQL 事务时间函数语义不一致。
 - `ROWNUM`。
 - `CONNECT BY`。
 - `DECODE`。
@@ -635,17 +870,59 @@ package 不当成“自动转换对象”，而当成“改造单元”。
 - materialized view。
 - package 全局变量。
 - autonomous transaction。
+- `SECURITY DEFINER`、owner、grant 和 search_path 安全差异。
 
-## 14. AI 副驾驶设计
+### 13.1 规则命中解释
 
-AI 不是迁移执行器，而是迁移副驾驶。平台必须保留确定性规则引擎作为主路径，AI 输出只能作为建议、草稿、解释或诊断，必须经过用户确认和审核。
+风险不是只显示一个等级。每条风险都必须能解释“为什么命中、影响什么、建议怎么处理”。
+
+规则命中解释至少包含：
+
+- 命中规则编号和名称。
+- 风险等级和是否阻塞。
+- 原始 SQL/PLSQL 片段。
+- 涉及对象和依赖对象。
+- Oracle 与 PostgreSQL 的语义差异。
+- 系统建议改法和人工确认点。
+- 是否已被用户豁免。
+
+前端应提供规则命中解释页或侧边栏，用户从风险列表、转换工作台、预处理报告都能跳转到同一个解释视图。
+
+### 13.2 待处理问题板
+
+平台需要一个统一待处理问题板，把技术问题和审核问题集中起来，而不是散落在解析日志、风险列表、AI 建议和报告里。
+
+问题来源：
+
+- `ParseIssue`。
+- `RiskIssue`。
+- PostgreSQL 语法预检问题。
+- AI 输出的 `uncertainties`。
+- 审核意见。
+- 执行失败和校验差异。
+
+问题字段：
+
+- 来源阶段。
+- 关联工程、输入批次、对象、SQL 版本。
+- 严重等级。
+- 状态：open、in_progress、resolved、waived。
+- 负责人。
+- 处理说明。
+
+## 14. AI 迁移智能层设计
+
+AI 不是迁移执行器。AI 的价值是基于扫描结果、依赖图、规则命中、项目策略和执行反馈，帮助用户理解大项目、规划迁移、生成改写草稿并诊断失败。平台必须保留确定性规则引擎、SQL parser、dry-run、执行器和人工审核作为可信边界。
 
 AI 的闭环不是“问一下模型”，而是：
 
 ```text
-构建上下文
-  -> 调用模型
-  -> 生成建议
+扫描和建模
+  -> 构建依赖图
+  -> 规则和风险命中
+  -> 构建迁移上下文
+  -> AI 项目/对象/片段分析
+  -> 工具验证
   -> 用户接受 / 忽略 / 编辑
   -> 写入审计
   -> 影响转换草稿或报告摘要
@@ -658,19 +935,20 @@ AI 建议只有被用户接受或编辑后，才可能影响后续产物。
 
 第一版适合做：
 
+- 项目级评估：根据对象清单、风险分布和依赖关系生成迁移范围摘要、阻塞项和人工工作量提示。
 - 解释风险：把 `NUMBER`、`DATE`、`ROWNUM`、package 全局变量等风险翻译成人能看懂的影响和处理建议。
 - SQL 改造建议：对单条 SQL、view、trigger、function/procedure 给出 PostgreSQL 改造思路。
-- PL/SQL 草稿增强：在规则引擎草稿基础上补充说明和 TODO。
+- PL/SQL 草稿增强：在规则引擎草稿基础上补充说明和待确认点。
+- 对象簇分析：对一组互相依赖的 view/procedure/package 先给改造方案，再进入单对象草稿。
 - 报告摘要：为预处理报告生成管理层摘要、DBA 摘要、开发改造清单摘要。
 - 错误解释：解释解析失败、转换失败、执行失败的可能原因。
-- 规则建议：根据用户确认过的改造方式，建议是否沉淀为转换规则。
+- 验证建议：为复杂 view、function、trigger 生成 dry-run、样例数据、行数/结果对比建议。
 
 后续增强：
 
-- 结合对象依赖图做迁移顺序解释。
+- 结合对象依赖图生成迁移波次建议。
 - 根据执行日志诊断失败 SQL。
 - 根据校验差异生成排查建议。
-- 根据历史项目推荐规则模板。
 - 支持自然语言问答，例如“哪些对象阻塞上线？”、“哪些 package 最危险？”。
 
 ### 14.2 AI 不允许直接做的事
@@ -685,15 +963,18 @@ AI 建议只有被用户接受或编辑后，才可能影响后续产物。
 
 ```mermaid
 flowchart LR
-  A["项目资产模型"] --> C["上下文构建器"]
-  B["转换结果和风险"] --> C
-  D["用户问题"] --> C
-  C --> E["提示词模板"]
-  E --> F["AI Provider Adapter"]
-  F --> G["AI 建议"]
-  G --> H["用户接受 / 忽略 / 编辑"]
-  H --> I["审计记录"]
-  H --> J["转换结果或报告草稿"]
+  A["输入源"] --> B["扫描和资产模型"]
+  B --> C["依赖图"]
+  B --> D["规则和风险命中"]
+  C --> E["迁移上下文构建器"]
+  D --> E
+  F["项目策略 / 目标 PG 版本"] --> E
+  E --> G["AI Provider Adapter"]
+  G --> H["项目评估 / 对象簇方案 / 改写草稿 / 诊断"]
+  H --> I["Parser / Dry-run / 规则验证"]
+  I --> J["用户接受 / 忽略 / 编辑"]
+  J --> K["审计记录"]
+  J --> L["转换结果、报告或工作项"]
 ```
 
 核心模块：
@@ -701,20 +982,26 @@ flowchart LR
 ```text
 AiProvider
   OpenAIProvider
-  LocalModelProvider
+  PrivateModelGatewayProvider
   MockProvider
 
 AiContextBuilder
+  ProjectMigrationContextBuilder
+  DependencyGraphContextBuilder
+  ObjectClusterContextBuilder
   ObjectContextBuilder
   ReportContextBuilder
   ErrorContextBuilder
 
 AiSuggestionService
+  assessProject()
+  planMigrationWaves()
+  analyzeObjectCluster()
   explainRisk()
   suggestConversion()
+  suggestValidation()
   summarizeReport()
   diagnoseError()
-  proposeRule()
 ```
 
 ### 14.4 上下文构建
@@ -723,164 +1010,83 @@ AI 输入必须小而准，不能把整个数据库对象一股脑塞给模型�
 
 上下文包建议包含：
 
+- 输入来源类型：直连、文件夹/zip、单 SQL、应用工程 SQL、目标库反扫。
 - 对象类型、对象名、schema。
 - 原始 Oracle SQL。
 - 规则引擎生成的 PostgreSQL SQL。
 - 风险清单。
-- 依赖对象摘要。
+- 依赖对象摘要和当前对象所在对象簇。
 - 用户已编辑内容。
 - 目标 PostgreSQL 版本。
 - 项目规则配置。
+- 缺失信息清单，例如文件输入缺少 row count、权限、统计信息。
 
 对大对象采用：
 
 - 分块摘要。
 - 只传相关片段。
-- 先由规则引擎定位风险行，再让 AI 解释。
+- 先由 parser、规则引擎和依赖图定位风险片段，再让 AI 解释和规划。
 - 保存 AI 请求和响应的哈希、模型名、提示词版本。
 
-### 14.5 RAG 和知识库
+### 14.5 迁移上下文
 
-AI 回答应优先基于平台自己的知识：
+SchemaPilot 运行时需要的是迁移上下文：
 
-- 内置 Oracle -> PostgreSQL 迁移规则。
-- 项目转换规则。
-- 已审核通过的历史改造案例。
-- 官方文档摘录或人工维护知识库。
-- 当前项目对象模型和风险结果。
+- 当前项目资产模型。
+- 依赖图和对象簇。
+- 规则命中和风险证据。
+- 项目迁移策略。
+- 用户已确认的 SQL 基线。
+- 执行日志、校验差异和失败回流。
 
-第一版可以先做轻量级上下文拼装，同时把知识库表结构和索引接口预留出来。真正的向量检索建议从 P1 开始启用。
+第一版必须先把当前项目上下文做准确。AI 的判断依据只来自当前项目的结构化事实、规则命中、风险、依赖、转换结果、报告快照和人工审核记录。
 
-### 14.5.1 向量知识库设计
+### 14.5.1 上下文边界
 
-SchemaPilot 的知识库分四类：
+上下文分三层：
 
-| 知识库 | 内容 | 来源 | 用途 |
+| 层 | 内容 | 是否必须 | 用途 |
 |---|---|---|---|
-| 规则知识库 | 类型映射、函数映射、语法差异、风险解释 | 平台内置、人工维护 | 解释风险、生成建议 |
-| 案例知识库 | 已审核 SQL 改造、PL/SQL 改造案例、失败修复案例 | 项目沉淀 | 推荐相似改造方式 |
-| 文档知识库 | Oracle/PostgreSQL 官方文档摘录、内部规范、操作手册 | 人工导入 | 回答迁移问题，提供出处 |
-| 项目知识库 | 当前项目对象摘要、风险摘要、报告摘要 | 自动生成 | 项目级问答和报告摘要 |
+| 确定性上下文 | 对象模型、依赖图、风险命中、策略配置、SQL 版本 | 必须 | 让 AI 知道当前项目事实 |
+| 规则证据 | 类型/函数/语法差异说明、内置迁移规则、官方出处摘要 | 必须 | 解释为什么需要改 |
+| 运行反馈 | 解析问题、转换问题、审核意见、执行失败、校验差异 | P1/P2 | 让 AI 诊断失败并生成待处理建议 |
 
-第一版推荐使用：
+MVP 不建立独立外部参考增强主链路。后续如接入外部文档、工单或代码仓库，也必须作为受信数据源进入项目上下文，不能影响 P0/P1 主闭环。
 
-```text
-PostgreSQL metadata DB
-  + pgvector extension
-  + Spring AI PgVectorStore
-```
+### 14.5.2 AI 输出形态
 
-原因：
+AI 输出必须结构化，至少包含：
 
-- 平台已经依赖 PostgreSQL，部署简单。
-- pgvector 支持向量相似度搜索和 HNSW/IVFFlat 索引。
-- Spring AI 已提供 PgVector VectorStore，可在 Java/Spring Boot 中直接使用。
-- 元数据、知识 chunk、向量、审计记录可以放在同一个数据库事务体系里。
+- `summary`：总体判断。
+- `ruleHits`：引用系统已命中的规则或风险，不能凭空编造。
+- `affectedObjects`：涉及对象和依赖对象。
+- `changePlan`：建议改动步骤。
+- `sourceSnippets`：原始 SQL/PLSQL 片段。
+- `targetDraft`：目标 PostgreSQL SQL/PLpgSQL 草稿，可为空。
+- `validationPlan`：建议如何验证。
+- `uncertainties`：需要人工确认的点。
+- `confidence`：置信度。
 
-后续如果知识量和并发量明显变大，再抽象到 Milvus、Qdrant 或 Elasticsearch/OpenSearch 混合检索。
+### 14.5.3 大项目分层
 
-### 14.5.2 RAG 闭环
-
-```mermaid
-flowchart LR
-  A["知识来源"] --> B["清洗和分块"]
-  B --> C["生成 embedding"]
-  C --> D["写入 pgvector"]
-  E["用户问题 / 对象风险"] --> F["检索相关知识"]
-  F --> G["拼装上下文"]
-  G --> H["LLM 生成建议"]
-  H --> I["附带证据来源"]
-  I --> J["用户接受 / 忽略 / 编辑"]
-  J --> K["审计和案例沉淀"]
-```
-
-RAG 回答必须包含：
-
-- 使用了哪些知识片段。
-- 片段来源。
-- 片段版本。
-- 相似度分数。
-- 生成建议。
-- 是否被用户采纳。
-
-### 14.5.3 知识入库策略
-
-知识 chunk 建议结构：
+大项目不能只做单对象 AI 建议，必须分层：
 
 ```text
-knowledge_document
-  id
-  source_type
-  title
-  source_uri
-  version
-  owner
-  status
-
-knowledge_chunk
-  id
-  document_id
-  chunk_type
-  content
-  metadata
-  content_hash
-  embedding
+ProjectMigrationBrain
+  -> Schema / Domain Analyzer
+  -> DependencyGraphAnalyzer
+  -> MigrationWavePlanner
+  -> ObjectClusterAdvisor
+  -> ObjectRewriteAdvisor
+  -> ValidationDiagnosisAgent
 ```
 
-chunk 类型：
-
-- `RULE`：迁移规则。
-- `CASE`：历史改造案例。
-- `DOC`：官方或内部文档。
-- `ERROR_FIX`：错误修复经验。
-- `PROJECT_SUMMARY`：项目级摘要。
-
-metadata 至少包含：
-
-- Oracle 版本。
-- PostgreSQL 版本。
-- 对象类型。
-- 风险类型。
-- 规则版本。
-- 项目 ID，历史案例需要区分是否允许跨项目复用。
-
-### 14.5.4 检索策略
-
-推荐混合检索：
-
-```text
-metadata filter
-  + keyword search
-  + vector similarity search
-  + rerank
-```
-
-例子：
-
-- 用户问 `ROWNUM 怎么迁移`：先按 `risk_type = ROWNUM` 过滤，再向量检索相关规则和案例。
-- 用户查看某个 trigger：先按 `object_type = TRIGGER` 过滤，再检索相似 trigger 改造案例。
-- 生成报告摘要：先检索当前项目的风险摘要、阻塞项、历史同类项目建议。
-
-第一版可以先做：
-
-- metadata filter。
-- pgvector topK 检索。
-- 简单分数阈值。
-
-后续再加：
-
-- BM25/全文检索。
-- reranker。
-- 多路召回。
-- 反馈学习。
-
-### 14.5.5 安全和隔离
+### 14.5.4 安全和隔离
 
 - 默认不把项目 SQL 和对象摘要跨项目复用。
-- 历史案例进入全局知识库前必须脱敏和审核。
-- 数据库连接串、密码、IP、业务敏感字段不得进入 embedding。
-- AI 回答必须标明“基于检索知识建议”，不能说成确定事实。
-- 企业私有化部署时支持关闭外部 embedding provider，改用本地 embedding 模型。
+- 数据库连接串、密码、IP、业务敏感字段不得进入 AI 提示词、响应、日志或审计明细。
+- AI 回答必须标明依据来自对象模型、规则命中、依赖图、报告快照还是执行/校验反馈。
+- 企业私有化部署时支持关闭外部 LLM provider，关闭后平台仍可完成规则转换、报告、审核和导出。
 
 ### 14.6 数据模型
 
@@ -907,7 +1113,8 @@ ai_suggestion
   prompt_version
   model_name
   input_hash
-  output_text
+  output_json
+  evidence_refs
   status
   accepted_by
   accepted_at
@@ -931,7 +1138,8 @@ ai_message
 - AI 建议必须保存版本。
 - 用户接受 AI 建议必须记录审计日志。
 - AI 输出进入转换结果前必须经过人工确认。
-- 支持关闭云端 AI，仅使用本地模型或完全关闭 AI。
+- 支持关闭 AI，平台仍可用规则、parser、依赖图、报告和人工工作台运行。
+- AI provider 可以是企业模型网关、云端模型、本地模型或 mock，不强制绑定某个本地运行时。
 - 对企业场景预留私有模型网关。
 
 ### 14.8 AI 建议状态机
@@ -962,11 +1170,12 @@ stateDiagram-v2
 
 适合放在这些位置：
 
+- 项目 dashboard：`项目迁移分析`、`阻塞项解释`、`迁移波次建议`。
+- 依赖图页：`解释依赖链`、`识别对象簇`、`定位阻塞对象`。
 - 转换工作台右侧：`解释风险`、`优化转换`、`生成改造说明`。
 - 预处理报告页：`生成摘要`、`生成开发改造清单`。
 - 执行监控页：`解释失败原因`、`建议重试策略`。
 - 对象清单页：`询问此对象`。
-- 项目 dashboard：`问 AI`，用于基于当前项目资产问答。
 
 ## 15. Agent、MCP 和 Skills 设计
 
@@ -976,7 +1185,7 @@ SchemaPilot 可以引入 Agent、MCP 和 Skills，但它们必须服务于迁移
 
 | 层 | 定位 | 例子 | 产物 |
 |---|---|---|---|
-| Agent | 有状态的任务编排者 | 评估 Agent、转换 Agent、校验 Agent | `WorkItem`、`AiSuggestion`、`ConversionResult` |
+| Agent | 有状态的任务编排者 | 项目评估 Agent、依赖分析 Agent、对象簇改造 Agent、校验诊断 Agent | `WorkItem`、`AiSuggestion`、`ConversionResult` |
 | MCP | 工具和上下文协议层 | 暴露对象、报告、工具；调用外部文档、工单、代码仓库 | 工具调用记录、资源快照 |
 | Skill | 可复用迁移能力包 | `oracle-trigger-to-pg`、`rownum-rewrite`、`package-analyzer` | 规则、提示词、测试、输出 schema |
 
@@ -996,12 +1205,13 @@ MVP 不做完全自主的多 Agent 系统，先做窄职责 Agent。
 
 | Agent | 职责 | 可调用能力 | 禁止事项 |
 |---|---|---|---|
-| AssessmentAgent | 汇总对象、风险、兼容性 | 对象查询、风险规则、知识库检索 | 不修改 SQL |
-| ConversionAgent | 对单个对象生成转换建议 | 转换规则、Skill、知识库、LLM | 不冻结基线 |
-| ReviewAgent | 生成审核摘要和待确认项 | 报告、风险、diff、知识库 | 不决定审核通过 |
+| ProjectAssessmentAgent | 汇总对象、风险、兼容性和缺失信息 | 对象查询、风险规则、依赖图、迁移上下文 | 不修改 SQL |
+| DependencyGraphAgent | 解释依赖链、识别阻塞对象和对象簇 | 依赖图、对象模型、调用关系 | 不改变迁移计划状态 |
+| ObjectClusterAdvisor | 对相关 view/procedure/package 生成改造方案 | 对象簇、转换规则、Skill、LLM | 不直接改写基线 |
+| ConversionAgent | 对单个对象生成转换建议 | 转换规则、Skill、迁移上下文、LLM | 不冻结基线 |
+| ReviewAgent | 生成审核摘要和待确认项 | 报告、风险、diff、迁移上下文 | 不决定审核通过 |
 | ExecutionPlannerAgent | 生成迁移计划建议 | 依赖图、基线 SQL、执行模式 | 不直接执行 |
-| ErrorDiagnosisAgent | 解释解析、转换、执行、校验错误 | 日志、对象、知识库、历史案例 | 不自动重试生产任务 |
-| KnowledgeAgent | 维护知识入库和检索 | 文档、案例、规则、embedding | 不跨项目泄露敏感案例 |
+| ErrorDiagnosisAgent | 解释解析、转换、执行、校验错误 | 日志、对象、规则证据、迁移上下文 | 不自动重试生产任务 |
 
 Agent 输出统一落库：
 
@@ -1056,13 +1266,13 @@ SchemaPilot 同时可以是 MCP Server 和 MCP Client。
 
 作为 MCP Server，向内部 Agent 或外部受信客户端暴露：
 
-- Resources：项目、对象、风险、报告、知识 chunk、执行日志。
-- Tools：解析 SQL、转换对象、检索知识、生成报告摘要、诊断错误。
+- Resources：项目、输入源、对象、依赖图、风险、报告、执行日志。
+- Tools：扫描输入源、解析 SQL、构建依赖图、转换对象、查询规则证据、生成报告摘要、诊断错误。
 - Prompts：风险解释、PL/SQL 改造、报告摘要、错误诊断等模板。
 
 作为 MCP Client，可选连接：
 
-- 内部文档知识库。
+- 内部文档或迁移规范。
 - 工单系统。
 - Git 仓库。
 - 企业模型网关。
@@ -1074,14 +1284,15 @@ MCP 暴露示例：
 Resources
   schemapilot://projects/{projectId}/objects/{objectId}
   schemapilot://projects/{projectId}/reports/precheck/{reportId}
-  schemapilot://projects/{projectId}/knowledge/chunks/{chunkId}
+  schemapilot://projects/{projectId}/dependency-graph
 
 Tools
   scanProjectObjects(projectId)
   parseOracleSql(inputSourceId)
+  buildDependencyGraph(projectId)
   convertObject(objectId, skillCode)
   explainRisk(riskIssueId)
-  searchKnowledge(query, filters)
+  buildMigrationContext(objectId, scope)
   generatePrecheckSummary(reportId)
   diagnoseExecutionError(taskStepId)
 
@@ -1097,7 +1308,10 @@ Prompts
 - 默认只启用内部 MCP Server。
 - 外部 MCP Client 功能默认关闭。
 - 所有 MCP tools 必须配置 allowlist。
-- 生产环境优先使用 HTTP/SSE 或 Streamable HTTP；STDIO 只用于本地开发和受信工具。
+- 远程 MCP 只采用 Streamable HTTP；旧版远程传输不作为生产目标协议。
+- STDIO 只用于本地开发和受信工具。
+- 远程入口必须校验 Origin、认证身份、项目权限和 tool allowlist。
+- 长任务必须用任务资源表达状态、TTL、取消、结果获取和失败原因，不能让 Agent 无限等待。
 - 工具参数必须 JSON Schema 校验。
 - 工具调用必须有超时、重试上限和审计日志。
 - 写操作工具默认 dry-run，正式写入必须走审核门禁。
@@ -1113,7 +1327,7 @@ Skill 是可复用迁移能力包，不是纯 prompt。
 skill.yaml
 rules/
 prompts/
-knowledge-filters/
+context/
 tools/
 fixtures/
 tests/
@@ -1136,7 +1350,7 @@ inputs:
 outputs:
   schema: TriggerConversionResult
 allowedTools:
-  - searchKnowledge
+  - buildMigrationContext
   - renderPostgresSql
 requiresReview: true
 ```
@@ -1162,12 +1376,12 @@ Skill 执行流程：
 flowchart LR
   A["DbObject / RiskIssue"] --> B["Skill 匹配"]
   B --> C["规则执行"]
-  C --> D["知识检索"]
-  D --> E["LLM 辅助"]
+  C --> D["迁移上下文组装"]
+  D --> E["可选 LLM 辅助"]
   E --> F["结构化输出"]
   F --> G["测试和校验"]
   G --> H["用户确认"]
-  H --> I["转换结果 / 待处理问题 / 知识沉淀"]
+  H --> I["转换结果 / 待处理问题 / 策略候选回流"]
 ```
 
 Skill 上线门禁：
@@ -1188,15 +1402,43 @@ AgentRuntime：自研轻量状态机
 SkillRegistry：扫描内置和插件 Skill
 ToolRegistry：统一 MCP tool 和本地 tool
 McpGateway：Spring AI MCP Client/Server 适配
-SkillExecutor：规则 + RAG + LLM + schema validation
+SkillExecutor：规则 + 迁移上下文 + 可选 LLM + schema validation
 AgentAuditService：记录 agent/tool/skill 全链路
 ```
 
 不建议 MVP 使用复杂的自主 Agent 框架。先用确定性状态机和任务表，把 Agent 做成可暂停、可重试、可审计的后台任务。
 
-## 16. 预处理报告
+## 16. 报告体系
 
-预处理报告不是附属功能，是平台核心。
+报告不是附属功能，是平台核心。SchemaPilot 要支持每个阶段导出报告，但不同报告的门禁意义不同。
+
+### 16.1 阶段报告
+
+每个阶段都可以生成快照报告并导出，至少包括：
+
+| 阶段 | 报告 | 内容 | 是否门禁 |
+|---|---|---|---|
+| 输入扫描 | Source Scan Report | 输入来源、文件树、checksum、解析状态、缺失信息 | 否 |
+| 资产建模 | Asset Model Report | 对象清单、来源位置、轻量资产模型、基础依赖 | 否 |
+| 转换改造 | Conversion Report | 原 SQL、目标 SQL、转换等级、人工编辑、AI 建议引用 | 否 |
+| 风险预检 | Precheck Report | 风险、阻塞项、兼容性评分、建议处理方式 | 是，正式执行前必须审核 |
+| 审核 | Review Report | 审核结论、意见、豁免项、冻结基线版本 | 是，正式执行前必须通过 |
+| 迁移计划 | Migration Plan Report | 执行步骤、依赖顺序、执行模式、回滚/重试策略 | 是，正式执行前必须确认 |
+| 执行 | Execution Report | 执行日志、失败步骤、重试、耗时、吞吐、资源指标 | 否，失败时生成回流问题 |
+| 校验 | Validation Report | 行数、抽样、checksum、对象存在、差异项 | 是，归档前必须处理差异 |
+| 最终归档 | Final Archive Report | 报告汇总、SQL 基线、执行结果、校验结论、剩余风险 | 是，项目关闭前必须生成 |
+
+阶段报告规则：
+
+- 报告必须是快照，引用输入源、对象、转换结果、风险、AI 建议、审核记录或执行日志的具体版本。
+- 阶段报告可以随时导出，格式第一版至少支持 HTML/JSON，后续支持 PDF/Word/Excel。
+- 只有 Precheck、Review、Migration Plan、Validation、Final Archive 报告承担门禁职责。
+- 任一上游产物变更后，相关下游报告必须标记为过期或重新生成。
+- AI 可以生成摘要，但报告结论必须来自规则、执行结果、校验结果和人工审核。
+
+### 16.2 预处理报告
+
+预处理报告是正式执行前的核心门禁报告。
 
 报告内容：
 
@@ -1217,17 +1459,34 @@ AgentAuditService：记录 agent/tool/skill 全链路
 - 阻塞项。
 - 审核结论。
 
-报告是快照。报告生成后，如果对象、规则或目标 SQL 被修改，报告需要重新生成或标记为过期。
+预处理报告是快照。报告生成后，如果对象、规则或目标 SQL 被修改，报告需要重新生成或标记为过期。
 
 AI 可参与生成报告摘要和建议处理方式，但报告结论仍来自规则引擎、风险评估和人工审核。
 
+### 16.3 报告差异
+
+同一阶段报告可以重新生成。平台必须能告诉用户“这次报告和上次相比变化了什么”，避免审核人重新阅读整份报告。
+
+报告差异至少包含：
+
+- 新增、删除、变化的对象数量。
+- 新增、消失、等级变化的风险。
+- SQL 基线变化。
+- AI 建议变化。
+- 审核状态变化。
+- 对迁移计划或导出 SQL 包的影响。
+
+如果报告差异包含 BLOCKER 或 SQL 基线变化，旧审核结论必须失效或要求重新确认。
+
 ## 17. 审核门禁
+
+P0 先采用单用户/开发模式审核：审核人可以由当前操作用户或配置项表示，先保证门禁状态机和报告快照正确。P1 再接入 `security` 模块，补齐用户、角色、权限、审批人策略和豁免权限。
 
 正式执行必须满足：
 
 - 预处理报告已生成。
-- 阻塞项已处理或被有权限用户豁免。
-- 必要角色审核通过。
+- 阻塞项已处理或被允许豁免的用户豁免。
+- 必要审核通过；P0 为单用户审核，P1 起支持角色审核。
 - 执行 SQL 基线已冻结。
 - 迁移计划已生成。
 
@@ -1240,6 +1499,23 @@ AI 可参与生成报告摘要和建议处理方式，但报告结论仍来自�
 - 报告版本。
 - 转换结果版本。
 
+### 17.1 SQL 包预览和导出门禁
+
+导出正式 SQL 包前必须先提供预览，让审核人确认包内容和执行顺序。
+
+SQL 包预览至少包含：
+
+- 导出文件结构。
+- 对象数量和对象类型分布。
+- SQL 执行顺序。
+- 未处理风险摘要。
+- 被豁免风险摘要。
+- SQL 基线版本。
+- 报告版本和审核记录。
+- 预计目标 schema。
+
+如果报告过期、SQL 基线过期、审核未通过或存在未豁免 BLOCKER，正式导出必须失败。
+
 ## 18. 迁移计划
 
 迁移计划从审核通过的转换结果生成。
@@ -1248,6 +1524,10 @@ AI 可参与生成报告摘要和建议处理方式，但报告结论仍来自�
 
 ```text
 PREPARE_TARGET
+  -> CAPTURE_SOURCE_SNAPSHOT
+  -> PRECHECK_TARGET
+  -> DRY_RUN_DDL
+  -> DRY_RUN_UNDO
   -> CREATE_SCHEMA
   -> CREATE_TABLE
   -> LOAD_DATA
@@ -1256,8 +1536,21 @@ PREPARE_TARGET
   -> CREATE_VIEW
   -> CREATE_ROUTINE
   -> CREATE_TRIGGER
+  -> RESET_SEQUENCE
+  -> REPLAY_GRANT
+  -> ANALYZE_TARGET
   -> VALIDATE
+  -> FINALIZE_ARCHIVE
 ```
+
+执行阶段要求：
+
+- `CAPTURE_SOURCE_SNAPSHOT` 在数据迁移场景生成源端一致性快照，Oracle 直连优先使用 `snapshot_scn`。
+- `DRY_RUN_DDL` 和 `DRY_RUN_UNDO` 都必须进入 Migration Plan Report；高风险 DDL 没有 Undo Script 不允许正式执行。
+- `RESET_SEQUENCE` 必须在数据导入后执行，避免 PostgreSQL sequence 游标落后于已迁移数据。
+- `REPLAY_GRANT` 负责权限重放和 owner/role 映射复核。
+- `ANALYZE_TARGET` 负责装载后统计信息刷新，避免目标库刚切换就因为统计信息缺失出现性能问题。
+- 任一阶段失败必须生成 work item，关联对象、SQL 版本、执行步骤、日志片段和建议回流位置。
 
 模式：
 
@@ -1274,14 +1567,17 @@ PREPARE_TARGET
 
 ```mermaid
 flowchart LR
-  A["Oracle 流式读取"] --> B["行转换"]
-  B --> C["COPY 编码"]
-  C --> D["PostgreSQL COPY FROM STDIN"]
-  D --> E["进度与 checkpoint"]
+  A["建立 snapshot_scn"] --> B["Oracle AS OF SCN 流式读取"]
+  B --> C["行转换"]
+  C --> D["COPY 编码"]
+  D --> E["PostgreSQL COPY FROM STDIN"]
+  E --> F["进度与 checkpoint"]
 ```
 
 关键设计：
 
+- 每个数据迁移任务必须生成 `DataSnapshotManifest`，至少包含 `snapshot_scn`、源库标识、源库版本、采集时间、表清单、shard 范围和校验策略。
+- Oracle 直连数据读取在权限和 undo retention 允许时，必须使用同一个 `snapshot_scn`；无法使用一致性快照时，任务只能标记为高风险或非生产演示模式。
 - Oracle 侧设置 fetch size。
 - PostgreSQL 侧使用 CopyManager。
 - 大表按主键 range 分片。
@@ -1291,7 +1587,7 @@ flowchart LR
 - 任务可暂停、取消、恢复。
 - LOB 字段单独测试吞吐。
 - 空字符串和 NULL 映射必须可配置。
-- COPY 编码缓冲、LOB 中转缓冲、大文件解析缓冲优先使用 FFM 堆外内存。
+- COPY 编码缓冲、LOB 中转缓冲、大文件解析缓冲先使用有界 heap / direct buffer；FFM 只有在压测证明收益后通过特性开关启用。
 
 并发控制公式：
 
@@ -1306,9 +1602,9 @@ activeShards <= min(
 
 虚拟线程可以很多，但数据库连接和 COPY 通道不能无限。
 
-### 18.1 FFM 堆外内存控制
+### 19.1 FFM 堆外内存控制
 
-SchemaPilot 使用 Java 25 的 Foreign Function & Memory API 控制大块临时内存。目标不是用 FFM 替代所有 Java 对象，而是把容易造成 GC 压力的大块迁移缓冲移到可控生命周期的堆外内存。
+FFM 不作为 P0 硬依赖。SchemaPilot 在 P1/P2 压测阶段使用 Java 25 Foreign Function & Memory API 控制大块临时内存，目标不是用 FFM 替代所有 Java 对象，而是把容易造成 GC 压力的大块迁移缓冲移到可控生命周期的堆外内存。
 
 适合使用 FFM 的场景：
 
@@ -1427,7 +1723,15 @@ Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
 | L4 | 分片 checksum |
 | L5 | 业务 SQL 回归 |
 
-第一版做到 L1-L2，第二阶段做到 L3-L4。
+校验门禁按用途分级：
+
+- P0 评估转换闭环只生成 Validation Plan 建议，不声明可切换生产。
+- P1 结构执行至少完成对象存在、DDL dry-run、关键 view/routine/trigger smoke test、权限检查和 SQL 包一致性检查。
+- P2 数据迁移至少完成全表 L1/L2；高风险表、核心业务表或抽样指定表必须完成 L3；大表和关键表在可承受成本下执行 L4。
+- Cutover-ready 报告必须额外检查 sequence position、grant/owner、post-load analyze、剩余 waived 风险和回滚脚本。
+- L5 业务 SQL 回归来自用户提供的验收 SQL，不由平台自动臆造业务正确性。
+
+Validation Report 必须明确标识结论类型：`DEMO_ONLY`、`STRUCTURE_READY`、`DATA_READY`、`CUTOVER_READY` 或 `BLOCKED`。
 
 ## 22. 安全设计
 
@@ -1440,6 +1744,9 @@ Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())
 - 文件存储按项目隔离。
 - 执行动作必须审计。
 - 支持只读扫描账号和执行账号分离。
+- `SECURITY DEFINER` 函数和过程默认标记高风险，必须检查 owner、执行权限和 `search_path`。
+- 自动生成的 PostgreSQL routine 如涉及 `SECURITY DEFINER`，必须显式设置安全 `search_path`，并把默认 `EXECUTE` 权限和 grant replay 放入审核项。
+- 角色、owner、grant 映射必须进入 Migration Plan Report；缺失映射不能静默跳过。
 
 ## 23. 可观测性
 
@@ -1473,7 +1780,7 @@ SchemaPilot 后端明确使用 Java。MVP 要坚持 **Java-first**：核心链�
   + 外部工具交叉校验
 ```
 
-### 23.1 选型结论
+### 24.1 选型结论
 
 | 层 | 推荐基础 | 使用方式 | 原因 |
 |---|---|---|---|
@@ -1486,10 +1793,10 @@ SchemaPilot 后端明确使用 Java。MVP 要坚持 **Java-first**：核心链�
 | SQL 方言转换参考 | SQLGlot | P2 可选 sidecar，不进入 MVP 主链路 | Oracle/Postgres 方言转换强，但 Python 栈和 Java 主体不同 |
 | 平台元数据库迁移 | Flyway | 管理 SchemaPilot 自己的表结构 | 简单稳定，Spring 集成好 |
 | 高速数据写入 | pgJDBC CopyManager | 直接使用 | 控制力强，适合自研 checkpoint 和进度 |
-| 堆外内存控制 | Java 25 FFM API | 直接使用 | COPY、LOB、文件解析缓冲可控，降低 GC 压力 |
+| 堆外内存控制 | Java 25 FFM API | P1/P2 特性开关 | COPY、LOB、文件解析缓冲可控，但必须压测证明收益后启用 |
 | CDC 增量同步 | Debezium Oracle Connector | P3 可选 | 适合后续在线同步，不进入 MVP |
 
-### 23.2 为什么不直接 fork 一个大项目
+### 24.2 为什么不直接 fork 一个大项目
 
 不建议直接 fork：
 
@@ -1509,7 +1816,7 @@ SchemaPilot 后端明确使用 Java。MVP 要坚持 **Java-first**：核心链�
 
 这些是 SchemaPilot 的产品核心，不能外包给通用工具。
 
-### 23.3 Java-first 边界
+### 24.3 Java-first 边界
 
 MVP 主链路必须全部 Java 化：
 
@@ -1520,7 +1827,8 @@ Spring Boot
   -> ANTLR PL/SQL parser
   -> Java 规则引擎
   -> Spring AI / LangChain4j adapter
-  -> Java FFM off-heap buffer
+  -> bounded heap/direct buffer
+  -> Java FFM off-heap buffer（P1/P2 feature flag）
   -> pgJDBC CopyManager
 ```
 
@@ -1533,7 +1841,7 @@ MVP 不使用：
 
 这样能保证开发、部署、测试、打包都简单，也符合 Java 25 + 虚拟线程的主架构。
 
-### 23.4 Ora2Pg 的使用边界
+### 24.4 Ora2Pg 的使用边界
 
 Ora2Pg 适合用在三个地方：
 
@@ -1547,7 +1855,7 @@ Ora2Pg 适合用在三个地方：
 - 可以通过外部进程调用、配置文件、输出文件导入来隔离。
 - 平台自己的转换结果仍以 SchemaPilot 的规则引擎、用户编辑和审核基线为准。
 
-### 23.5 SQL 解析组合
+### 24.5 SQL 解析组合
 
 推荐组合：
 
@@ -1565,14 +1873,14 @@ PL/SQL：ANTLR grammar
 - PL/SQL 需要 grammar，但生成 AST 后仍要自建对象模型。
 - SQLGlot 很强，但引入 Python sidecar 会增加部署复杂度，不放进 Java MVP 主链路。
 
-### 23.6 AI 底座
+### 24.6 AI 底座
 
 第一选择：Spring AI。
 
 原因：
 
 - 和 Spring Boot 生态一致。
-- 支持 ChatClient、Advisor、RAG、向量存储等常见模式。
+- 支持 ChatClient、Advisor、工具调用和结构化输出等常见模式。
 - 适合我们做 `AiProvider`、上下文构建、审计、可观测性。
 
 备选：LangChain4j。
@@ -1580,19 +1888,20 @@ PL/SQL：ANTLR grammar
 适合场景：
 
 - 需要更多 LLM provider。
-- 需要更强的工具调用、agent、RAG 生态。
+- 需要更多 LLM provider 或更强的工具调用、agent 生态。
 - Spring AI 在某些 provider 上不满足需求。
 
 设计上必须保留 `AiProvider` 抽象，避免被单一 AI 框架锁死。
 
-## 25. 第一版边界
+## 25. 第一条闭环边界
 
-第一版必须做实：
+第一条可演示闭环必须做实：
 
-- 直连 Oracle 扫描。
-- SQL 文件上传。
 - 手工 SQL 输入。
-- 对象清单。
+- 单个 SQL 文件上传。
+- 多工程、文件夹和 zip 导入。
+- 工程树、来源树和对象清单。
+- 基础依赖和来源追溯。
 - 表、字段、索引、sequence、简单 view 转换。
 - trigger/function/procedure/package 识别和风险标注。
 - 转换工作台。
@@ -1602,12 +1911,15 @@ PL/SQL：ANTLR grammar
 - 审核流程。
 - SQL 包导出。
 
-第一版可以不做：
+第一条闭环可以不做：
 
+- 直连 Oracle 扫描。
 - 完整数据迁移。
 - 复杂 package 自动转换。
 - `.dmp` 直接读取。
 - 分布式 worker。
+- 外部化 Agent / MCP / Skills。
+- FFM 作为 P0 硬依赖。
 - 在线 CDC。
 - AI 自动执行 SQL。
 - AI 自动审核通过。
