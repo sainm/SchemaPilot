@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -86,9 +88,19 @@ class InputControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].status").value("GENERATED"))
                 .andReturn();
-        String versionId = JsonPath.read(versionResult.getResponse().getContentAsString(), "$.data[0].id");
+        List<Map<String, Object>> versions = JsonPath.read(versionResult.getResponse().getContentAsString(), "$.data");
+        String tableVersionId = versions.stream()
+                .filter(version -> ((String) version.get("targetSql")).contains("create table"))
+                .map(version -> (String) version.get("id"))
+                .findFirst()
+                .orElseThrow();
+        String draftViewVersionId = versions.stream()
+                .filter(version -> ((String) version.get("targetSql")).startsWith("-- DRAFT"))
+                .map(version -> (String) version.get("id"))
+                .findFirst()
+                .orElseThrow();
 
-        mockMvc.perform(post("/api/projects/{projectId}/sql-versions/{versionId}/edits", projectId, versionId)
+        mockMvc.perform(post("/api/projects/{projectId}/sql-versions/{versionId}/edits", projectId, tableVersionId)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -97,7 +109,18 @@ class InputControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("EDITED"))
-                .andExpect(jsonPath("$.data.parentVersionId").value(versionId));
+                .andExpect(jsonPath("$.data.parentVersionId").value(tableVersionId));
+
+        mockMvc.perform(post("/api/projects/{projectId}/sql-versions/{versionId}/edits", projectId, draftViewVersionId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "targetSql": "create view \\"v_users\\" as select * from \\"users\\";"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("EDITED"))
+                .andExpect(jsonPath("$.data.parentVersionId").value(draftViewVersionId));
 
         MvcResult reportResult = mockMvc.perform(post("/api/projects/{projectId}/reports/precheck", projectId))
                 .andExpect(status().isOk())
