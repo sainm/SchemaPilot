@@ -1,0 +1,12 @@
+package org.sainm.schemapilot.dependency;
+
+public enum DependencyType {
+    TABLE_REFERENCES_TABLE,
+    TABLE_USES_SEQUENCE,
+    INDEX_ON_TABLE,
+    VIEW_REFERENCES_TABLE,
+    TRIGGER_ON_TABLE,
+    ROUTINE_REFERENCES_OBJECT,
+    PACKAGE_BODY_FOR_SPEC,
+    CROSS_SOURCE_DEPENDENCY
+}

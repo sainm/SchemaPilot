@@ -1,564 +1,489 @@
-﻿# SchemaPilot 任务清单
+# SchemaPilot 任务清单
 
 ## 1. 状态说明
 
-- `[ ]` 未开始
-- `[~]` 进行中
-- `[x]` 已完成
-- `[!]` 阻塞
+本任务清单按重新开始后的 MVP 计划生成。
 
-优先级：
+当前基线：
 
-- `P0`：第一条评估转换闭环必须完成。
-- `P1`：结构执行和基础数据迁移。
-- `P2`：高速迁移、复杂对象、企业化增强。
-- `P3`：生产硬化、治理、真实环境联调。
+- [x] `P0` 保留 `docs/design.md`。
+- [x] `P0` 重新生成 `docs/plan.md`。
+- [x] `P0` 重新生成 `docs/task.md`。
+- [x] `P0` 后端代码重新创建。
+- [x] `P0` 前端代码重新创建。
 
-闭环验收要求：
+任务状态：
 
-- 每个闭环必须有入口、过程、产物、门禁、回流。
-- 每个产物必须能追溯来源和版本。
-- 每个门禁必须有测试证明不能绕过。
-- 每个失败路径必须能形成待处理问题，而不是只写日志。
+- `[ ]` 未开始。
+- `[~]` 进行中。
+- `[x]` 已完成。
 
-## 2. 当前已完成
-
-- [x] `P0` 创建设计文档。
-- [x] `P0` 创建实施计划文档。
-- [x] `P0` 创建任务清单文档。
-- [x] `P0` 明确 Java 25 + 虚拟线程方向。
-- [x] `P1` 明确 Java 25 FFM 用于 COPY、LOB、文件解析等堆外缓冲控制。
-- [x] `P0` 明确预处理报告和审核为核心门禁。
-- [x] `P0` 明确 AI 作为迁移副驾驶，不直接替代规则引擎和人工审核。
-- [x] `P0` 明确本地 LLM + 本地知识库为私有化默认目标，云端 provider 仅显式启用。
-- [x] `P0` 明确资产、转换、评审、执行、校验、规则沉淀闭环。
-
-## 3. P0：项目骨架
-
-- [x] `P0` 初始化 Git 仓库。
-- [x] `P0` 创建 `backend/` Spring Boot 4.x 项目。
-- [x] `P0` 配置 Java 25。
-- [x] `P0` 启用虚拟线程。
-- [x] `P0` 配置 `spring.main.keep-alive=true`。
-- [x] `P0` 添加健康检查接口。
-- [x] `P0` 添加统一异常处理。
-- [x] `P0` 添加统一 API 返回结构。
-- [x] `P0` 添加 PostgreSQL 元数据库连接。
-- [x] `P0` 添加 Flyway 或 Liquibase。
-- [x] `P0` 创建 `frontend/` React + TypeScript + Vite 项目。
-- [x] `P0` 接入 Ant Design Pro。
-- [x] `P0` 前端调用后端 health 接口。
-
-## 4. P0：核心数据模型
-
-- [x] `P0` 创建 `project` 表。
-- [x] `P0` 创建 `input_source` 表。
-- [x] `P0` 创建 `db_object` 表。
-- [x] `P0` 创建 `parse_issue` 表。
-- [x] `P0` 创建 `risk_issue` 表。
-- [x] `P0` 创建 `conversion_result` 表。
-- [x] `P0` 创建 `precheck_report` 表。
-- [x] `P0` 创建 `review_record` 表。
-- [x] `P0` 创建 `audit_log` 表。
-- [x] `P0` 创建 `sql_version` 或等价 SQL 版本表。
-- [x] `P0` 创建 `artifact_version` 或等价产物版本表。
-- [x] `P0` 创建 `work_item` 或等价问题回流表。
-- [x] `P0` 创建 `ai_provider_config` 表。
-- [x] `P0` 创建 `prompt_template` 表。
-- [x] `P0` 创建 `ai_suggestion` 表。
-- [x] `P0` 创建 `ai_conversation` 表。
-- [x] `P0` 创建 `ai_message` 表。
-- [x] `P0` 创建 `agent_run` 表。
-- [x] `P0` 创建 `agent_step` 表。
-- [x] `P0` 创建 `skill_definition` 表。
-- [x] `P0` 创建 `skill_run` 表。
-- [x] `P0` 创建 `mcp_tool_call` 表。
-- [x] `P0` 创建 `knowledge_document` 表。
-- [x] `P0` 创建 `knowledge_chunk` 表。
-- [x] `P0` 预留 pgvector `embedding` 字段。
-- [x] `P0` 定义对象类型枚举。
-- [x] `P0` 定义对象状态枚举。
-- [x] `P0` 定义报告状态枚举：`DRAFT`、`READY_FOR_REVIEW`、`APPROVED`、`REJECTED`、`EXPIRED`。
-- [x] `P0` 定义 SQL 基线状态枚举：`GENERATED`、`EDITED`、`REVIEWED`、`BASELINED`、`EXPIRED`。
-- [x] `P0` 定义 Agent 状态枚举。
-- [x] `P0` 定义 Skill 状态枚举。
-- [x] `P0` 定义转换等级枚举：`AUTO`、`REVIEW_REQUIRED`、`DRAFT`、`MANUAL_REQUIRED`、`UNSUPPORTED`。
-- [x] `P0` 定义风险等级枚举：`LOW`、`MEDIUM`、`HIGH`、`BLOCKER`。
-
-## 5. P0：手工 SQL 垂直切片
-
-- [x] `P0` 创建手工 SQL 输入 API。
-- [x] `P0` 创建手工 SQL 输入页面。
-- [x] `P0` 实现 SQL 原文保存。
-- [x] `P0` 实现初版 statement splitter。
-- [x] `P0` 识别 `CREATE TABLE`。
-- [x] `P0` 识别 `CREATE INDEX`。
-- [x] `P0` 识别 `CREATE VIEW`。
-- [x] `P0` 识别 `CREATE SEQUENCE`。
-- [x] `P0` 识别 `CREATE TRIGGER` 块。
-- [x] `P0` 识别 `CREATE FUNCTION` 块。
-- [x] `P0` 识别 `CREATE PROCEDURE` 块。
-- [x] `P0` 识别 `CREATE PACKAGE` 和 `CREATE PACKAGE BODY`。
-- [x] `P0` 解析失败时保存 `ParseIssue`。
-- [x] `P0` 解析失败时保留原 SQL，不丢对象。
-
-## 6. P0：转换引擎 MVP
-
-- [x] `P0` 定义 `ObjectConverter` 接口。
-- [x] `P0` 定义 `ConversionContext`。
-- [x] `P0` 定义 `ConversionResult` 保存逻辑。
-- [x] `P0` 实现 Oracle 类型到 PostgreSQL 类型映射。
-- [x] `P0` 转换 `VARCHAR2`。
-- [x] `P0` 转换 `NUMBER(p,s)`。
-- [x] `P0` 转换无精度 `NUMBER` 并标风险。
-- [x] `P0` 转换 `DATE` 并标语义风险。
-- [x] `P0` 转换 `CLOB`。
-- [x] `P0` 转换 `BLOB`。
-- [x] `P0` 转换主键。
-- [x] `P0` 转换唯一约束。
-- [x] `P0` 转换 check 约束。
-- [x] `P0` 转换普通索引。
-- [x] `P0` 转换 sequence。
-- [x] `P0` 转换简单 view。
-- [x] `P0` 识别 trigger 并生成草稿或风险。
-- [x] `P0` 识别 function/procedure 并生成草稿或风险。
-- [x] `P0` 识别 package 并生成拆解建议。
-
-## 7. P0：风险识别
-
-- [x] `P0` 检测 `NUMBER` 精度风险。
-- [x] `P0` 检测 Oracle `DATE` 语义风险。
-- [x] `P0` 检测空字符串和 NULL 风险。
-- [x] `P0` 检测 quoted identifier。
-- [x] `P0` 检测 `ROWNUM`。
-- [x] `P0` 检测 `CONNECT BY`。
-- [x] `P0` 检测 `DECODE`。
-- [x] `P0` 检测 `NVL` 并给出替换建议。
-- [x] `P0` 检测 `SYSDATE` 并给出替换建议。
-- [x] `P0` 检测 Oracle hint。
-- [x] `P0` 检测 dynamic SQL。
-- [x] `P0` 检测 autonomous transaction。
-- [x] `P0` 检测 package global variable。
-- [x] `P0` 计算对象风险等级。
-- [x] `P0` 计算项目兼容性评分。
-
-## 8. P0：AI 副驾驶 MVP
-
-- [x] `P0` 定义 `AiProvider` 接口。
-- [x] `P0` 实现 `MockAiProvider`，用于无 API key 的本地开发。
-- [x] `P0` 预留云端模型 provider 配置。
-- [x] `P0` 预留本地模型 provider 配置。
-- [x] `P0` 将本地 LLM provider 标记为私有化部署优先路径。
-- [x] `P1` 实现本地 OpenAI-compatible LLM provider，并保留 mock fallback。
-- [x] `P0` 创建提示词模板版本机制。
-- [x] `P0` 实现 AI 上下文构建器。
-- [x] `P0` 实现敏感信息脱敏。
-- [x] `P0` 实现风险解释能力。
-- [x] `P0` 实现 SQL 改造建议能力。
-- [x] `P0` 实现 PL/SQL 草稿说明能力。
-- [x] `P0` 实现预处理报告摘要能力。
-- [x] `P0` 定义知识库 chunk 模型。
-- [x] `P0` 定义知识库 metadata 规范。
-- [x] `P0` 实现知识入库前脱敏。
-- [x] `P0` 实现轻量知识检索接口。
-- [x] `P0` AI 回答保存引用的知识 chunk。
-- [x] `P0` 保存 AI 请求模型名、提示词版本、输入 hash。
-- [x] `P0` 保存 AI 输出为 `ai_suggestion`。
-- [x] `P0` 支持用户接受 AI 建议。
-- [x] `P0` 支持用户忽略 AI 建议。
-- [x] `P0` 支持用户编辑 AI 建议后应用。
-- [x] `P0` AI 建议应用后写入审计日志。
-- [x] `P0` 禁止 AI 输出自动覆盖执行基线。
-- [x] `P0` 禁止 AI 自动审核通过。
-
-## 9. P0：Agent / MCP / Skills MVP
-
-- [x] `P0` 定义 `AgentRuntime` 接口。
-- [x] `P0` 实现轻量 Agent 状态机。
-- [x] `P0` 实现 `AssessmentAgent`。
-- [x] `P0` 实现 `ConversionAgent`。
-- [x] `P0` 实现 `ErrorDiagnosisAgent` 原型。
-- [x] `P0` 记录 `agent_run`。
-- [x] `P0` 记录 `agent_step`。
-- [x] `P0` 定义 `SkillRegistry`。
-- [x] `P0` 定义 `SkillExecutor`。
-- [x] `P0` 定义 `skill.yaml` 格式。
-- [x] `P0` 实现 `oracle-table-ddl` Skill。
-- [x] `P0` 实现 `oracle-view-sql` Skill。
-- [x] `P0` 实现 `oracle-trigger-to-postgres` Skill 草稿。
-- [x] `P0` Skill 输出必须做 schema validation。
-- [x] `P0` Skill 必须声明允许调用的工具。
-- [x] `P0` Skill 必须声明是否需要审核。
-- [x] `P0` 定义 `ToolRegistry`。
-- [x] `P0` 定义 `McpGateway`。
-- [x] `P0` 暴露只读 MCP resource 原型。
-- [x] `P0` 暴露安全 MCP tool 原型。
-- [x] `P0` 暴露 MCP prompt 原型。
-- [x] `P0` MCP tool 调用必须 allowlist。
-- [x] `P0` MCP tool 调用必须记录审计。
-- [x] `P0` MCP 写操作默认 dry-run。
-- [x] `P0` 生产环境默认关闭外部 MCP Client。
-
-## 10. P0：知识库 MVP
-
-- [x] `P0` 定义规则知识库内容格式。
-- [x] `P0` 定义案例知识库内容格式。
-- [x] `P0` 定义文档知识库内容格式。
-- [x] `P0` 定义项目知识库内容格式。
-- [x] `P0` 内置第一批 Oracle -> PostgreSQL 风险解释知识。
-- [x] `P0` 内置第一批类型映射知识。
-- [x] `P0` 内置第一批函数映射知识。
-- [x] `P0` 实现知识 chunk 版本管理。
-- [x] `P0` 实现知识 chunk 来源记录。
-- [x] `P0` 实现知识 chunk 审核状态。
-- [x] `P0` 验证敏感信息不会进入知识库。
-
-## 11. P0：转换工作台
-
-- [x] `P0` 创建对象清单页面。
-- [x] `P0` 支持按对象类型筛选。
-- [x] `P0` 支持按风险等级筛选。
-- [x] `P0` 创建转换工作台页面。
-- [x] `P0` 集成 Monaco Editor。
-- [x] `P0` 左侧显示 Oracle 原始 SQL。
-- [x] `P0` 右侧显示 PostgreSQL 目标 SQL。
-- [x] `P0` 显示转换等级。
-- [x] `P0` 显示风险问题。
-- [x] `P0` 支持用户编辑目标 SQL。
-- [x] `P0` 保存用户编辑版本。
-- [x] `P0` 记录目标 SQL 版本来源：规则生成、AI 建议、人工编辑。
-- [x] `P0` 实现 SQL 基线冻结逻辑。
-- [x] `P0` 审核通过后生成 `baseline_sql`。
-- [x] `P0` 修改目标 SQL 后标记旧报告和旧基线过期。
-- [x] `P0` 支持恢复自动生成版本。
-- [x] `P0` 记录编辑审计日志。
-- [x] `P0` 添加“AI 解释风险”按钮。
-- [x] `P0` 添加“AI 改造建议”按钮。
-- [x] `P0` 添加 AI 建议接受/忽略入口。
-
-## 12. P0：SQL 文件导入
-
-- [x] `P0` 创建文件上传 API。
-- [x] `P0` 创建文件上传页面。
-- [x] `P0` 保存文件 checksum。
-- [x] `P0` 记录文件编码。
-- [x] `P0` 异步解析文件。
-- [x] `P0` 推送解析进度。
-- [x] `P0` 支持 Data Pump SQLFILE 文本导入。
-- [x] `P0` 对无法执行的匿名 PL/SQL 块标风险。
-- [x] `P0` 上传后生成对象清单。
-
-## 13. P0：预处理报告
-
-- [x] `P0` 生成资产统计。
-- [x] `P0` 生成对象类型分布。
-- [x] `P0` 生成风险分布。
-- [x] `P0` 生成高风险对象列表。
-- [x] `P0` 生成类型映射清单。
-- [x] `P0` 生成 SQL/PLSQL 问题清单。
-- [x] `P0` 生成建议处理方式。
-- [x] `P0` 生成建议迁移顺序草案。
-- [x] `P0` 生成 AI 管理层摘要。
-- [x] `P0` 生成 AI 开发改造摘要。
-- [x] `P0` 生成报告快照。
-- [x] `P0` 报告快照记录对象版本、转换结果版本、风险版本、AI 建议版本。
-- [x] `P0` 修改对象后标记报告过期。
-- [x] `P0` 修改目标 SQL 后标记报告过期。
-- [x] `P0` 修改规则配置后标记报告过期。
-- [x] `P0` 创建预处理报告页面。
-
-## 14. P0：审核流程
-
-- [x] `P0` 提交报告审核。
-- [x] `P0` 审核通过。
-- [x] `P0` 有条件通过。
-- [x] `P0` 驳回。
-- [x] `P0` 请求修改。
-- [x] `P0` 保存审核意见。
-- [x] `P0` 保存审核时间和审核人。
-- [x] `P0` 审核记录绑定报告版本和 SQL 版本。
-- [x] `P0` 未审核通过时禁止正式导出。
-- [x] `P0` 报告过期时禁止正式导出。
-- [x] `P0` 审核通过后冻结 SQL 基线。
-- [x] `P0` 创建审核记录页面。
-
-## 15. P0：SQL 包导出
-
-- [x] `P0` 生成 PostgreSQL SQL 包。
-- [x] `P0` 按对象类型排序 SQL。
-- [x] `P0` 只使用审核冻结后的 `baseline_sql`。
-- [x] `P0` 导出前检查报告和审核状态。
-- [x] `P0` 导出前检查报告是否过期。
-- [x] `P0` 导出前检查 SQL 基线是否过期。
-- [x] `P0` 导出 zip 或单个 `.sql` 文件。
-- [x] `P0` 记录导出审计日志。
-
-## 16. P0：闭环回归
-
-- [x] `P0` 准备 `CREATE TABLE users` 端到端样例。
-- [x] `P0` 准备包含 view/index/sequence 的 SQL 文件样例。
-- [x] `P0` 准备包含 trigger/function/package 的风险样例。
-- [x] `P0` 编写 P0 手工验收清单。
-- [x] `P0` 验证手工 SQL 到 SQL 包导出完整闭环。
-- [x] `P0` 验证 SQL 文件到 SQL 包导出完整闭环。
-- [x] `P0` 验证解析失败不丢失原文。
-- [x] `P0` 验证 AI 建议不能自动覆盖目标 SQL。
-- [x] `P0` 验证未审核不能导出正式 SQL 包。
-- [x] `P0` 验证报告过期不能导出正式 SQL 包。
-- [x] `P0` 验证修改目标 SQL 后报告过期。
-- [x] `P0` 验证审核通过后生成 SQL 基线。
-- [x] `P0` 验证关键动作都有审计日志。
-
-## 17. P1：数据源管理
-
-- [x] `P1` 创建 `datasource_config` 表。
-- [x] `P1` 加密保存数据库密码。
-- [x] `P1` Oracle 数据源表单。
-- [x] `P1` PostgreSQL 数据源表单。
-- [x] `P1` Oracle 连接测试。
-- [x] `P1` PostgreSQL 连接测试。
-- [x] `P1` Oracle 版本识别。
-- [x] `P1` PostgreSQL 版本识别。
-- [x] `P1` 权限检查。
-- [x] `P1` 密码脱敏。
-
-## 18. P1：Oracle 直连扫描
-
-- [x] `P1` 扫描 schema。
-- [x] `P1` 扫描 table。
-- [x] `P1` 扫描 column。
-- [x] `P1` 扫描 primary key。
-- [x] `P1` 扫描 foreign key。
-- [x] `P1` 扫描 unique/check constraint。
-- [x] `P1` 扫描 index。
-- [x] `P1` 扫描 sequence。
-- [x] `P1` 扫描 view。
-- [x] `P1` 扫描 trigger。
-- [x] `P1` 扫描 function。
-- [x] `P1` 扫描 procedure。
-- [x] `P1` 扫描 package。
-- [x] `P1` 扫描 synonym。
-- [x] `P1` 扫描 comment。
-- [x] `P1` 扫描 partition metadata。
-- [x] `P1` 使用 `DBMS_METADATA` 获取 DDL。
-- [x] `P1` 使用源码视图获取 PL/SQL。
-- [x] `P1` 扫描进度实时推送。
-- [x] `P1` 权限不足时记录风险。
-
-## 19. P1：迁移计划和 DDL 执行
-
-- [x] `P1` 创建 `migration_plan` 表。
-- [x] `P1` 创建 `migration_plan_step` 表。
-- [x] `P1` 迁移计划必须绑定已审核 SQL 基线版本。
-- [x] `P1` SQL 基线过期时禁止生成正式迁移计划。
-- [x] `P1` 生成 schema 创建步骤。
-- [x] `P1` 生成 table 创建步骤。
-- [x] `P1` 生成 index 创建步骤。
-- [x] `P1` 生成 constraint 创建步骤。
-- [x] `P1` 生成 view 创建步骤。
-- [x] `P1` 生成 routine 创建步骤。
-- [x] `P1` 依赖排序。
-- [x] `P1` 创建 PostgreSQL DDL 执行器。
-- [x] `P1` 执行日志。
-- [x] `P1` 单步重试。
-- [x] `P1` 失败原因展示。
-- [x] `P1` DDL 执行失败时生成待处理问题。
-
-## 20. P1：基础数据迁移
-
-- [x] `P1` 实现 Oracle streaming reader。
-- [x] `P1` 实现 PostgreSQL COPY writer。
-- [x] `P1` 定义 `MemoryBudgetManager`。
-- [x] `P1` 定义项目级堆外内存预算。
-- [x] `P1` 定义 task 级堆外内存预算。
-- [x] `P1` 定义 shard 级 `Arena` 生命周期。
-- [x] `P1` 实现 FFM COPY 编码缓冲。
-- [x] `P1` 实现 FFM buffer flush 策略。
-- [x] `P1` 实现 arena close 安全检查。
-- [x] `P1` 定义 NULL 和空字符串编码策略。
-- [x] `P1` 支持小表全量迁移。
-- [x] `P1` 记录迁移行数。
-- [x] `P1` 记录 rows/s。
-- [x] `P1` 实时推送进度。
-- [x] `P1` 记录堆外内存使用量。
-- [x] `P1` 记录 arena 未关闭数量。
-- [x] `P1` 堆外内存超限时触发限流。
-- [x] `P1` 捕获 COPY 错误。
-- [x] `P1` 失败重试。
-- [x] `P1` 数据迁移失败时生成待处理问题。
-- [x] `P1` 行数校验失败时生成待处理问题。
-
-## 21. P1：执行校验闭环回归
-
-- [x] `P1` 准备测试 Oracle 源表和 PostgreSQL 目标库。
-- [x] `P1` 验证已审核 SQL 基线可以生成迁移计划。
-- [x] `P1` 验证未审核 SQL 不能生成正式迁移计划。
-- [x] `P1` 验证 DDL 能执行到 PostgreSQL。
-- [x] `P1` 验证小表 COPY 后行数一致。
-- [x] `P1` 验证 DDL 错误能定位到对象和 SQL。
-- [x] `P1` 验证 COPY 错误能定位到表和批次。
-- [x] `P1` 验证校验失败能回流为待处理问题。
-- [x] `P1` 验证 COPY 迁移时 heap 占用稳定。
-- [x] `P1` 验证 shard 完成后 FFM arena 释放。
-
-## 22. P2：高速数据迁移
-
-- [x] `P2` 大表识别。
-- [x] `P2` 主键 range 分片。
-- [x] `P2` hash 分片 fallback。
-- [x] `P2` shard checkpoint。
-- [x] `P2` 断点续传。
-- [x] `P2` shard 级重试。
-- [x] `P2` 项目级并发限制。
-- [x] `P2` 表级并发限制。
-- [x] `P2` 全局并发限制。
-- [x] `P2` LOB 迁移优化。
-- [x] `P2` LOB 分块读取使用 FFM 缓冲。
-- [x] `P2` checksum 使用 FFM 分片缓冲。
-- [x] `P2` 迁移限速。
-- [x] `P2` 暂停任务。
-- [x] `P2` 取消任务。
-- [x] `P2` 恢复任务。
-
-## 23. P2：校验
-
-- [x] `P2` 对象存在校验。
-- [x] `P2` 行数校验。
-- [x] `P2` 抽样校验。
-- [x] `P2` 分片 checksum。
-- [x] `P2` view 执行校验。
-- [x] `P2` routine 编译校验。
-- [x] `P2` 创建校验报告。
-- [x] `P2` 校验失败详情。
-
-## 24. P2：PL/SQL 增强
-
-- [x] `P2` trigger 转换增强。
-- [x] `P2` function 转换增强。
-- [x] `P2` procedure 转换增强。
-- [x] `P2` package spec 分析。
-- [x] `P2` package body 分析。
-- [x] `P2` package routine 拆解。
-- [x] `P2` Oracle 内置包替代建议。
-- [x] `P2` dynamic SQL 标注增强。
-- [x] `P2` exception 语义差异提示。
-
-## 25. P2：AI 增强
-
-- [x] `P2` AI 执行错误诊断。
-- [x] `P2` AI 校验差异排查建议。
-- [x] `P2` AI 规则沉淀建议。
-- [x] `P2` AI 基于历史项目推荐规则模板。
-- [x] `P2` AI 项目级自然语言问答。
-- [x] `P2` AI 长 PL/SQL 分块摘要。
-- [x] `P2` AI package 改造方案生成。
-- [x] `P2` AI 成本统计和用量看板。
-- [x] `P2` RAG 多路召回。
-- [x] `P2` RAG rerank。
-- [x] `P2` 历史案例脱敏后进入全局知识库。
-- [x] `P2` 本地 embedding 模型适配。
-- [x] `P2` 知识库命中率和采纳率看板。
-
-## 26. P2：规则沉淀闭环
-
-- [x] `P2` 从人工编辑 SQL 中抽取规则候选。
-- [x] `P2` 从 AI 建议中抽取规则候选。
-- [x] `P2` 规则候选必须人工确认。
-- [x] `P2` 规则候选进入测试样例。
-- [x] `P2` 规则通过测试后才能启用。
-- [x] `P2` 规则启用后可重新转换同类 SQL。
-- [x] `P2` 记录规则来源项目和审核人。
-
-## 27. 技术预研任务
-
-- [x] `P0` 验证 statement splitter 能处理 trigger/function/package。
-- [x] `P0` 准备 SQL/PLSQL fixture 样例集。
-- [x] `P0` 验证 AI Provider 抽象。
-- [x] `P0` 验证 AI 提示词脱敏。
-- [x] `P0` 验证 AI 建议保存和审计。
-- [x] `P0` 验证 pgvector 扩展可用性。
-- [x] `P0` 验证 Spring AI PgVectorStore。
-- [x] `P0` 验证知识 chunk metadata filter。
-- [x] `P0` 验证 embedding 前脱敏。
-- [x] `P0` 验证 Spring AI MCP Java SDK。
-- [x] `P0` 验证 MCP tool allowlist 和超时。
-- [x] `P0` 验证 Skill YAML 加载和 schema validation。
-- [x] `P0` 验证 Agent 状态机暂停、失败和审计。
-- [x] `P1` 验证 Oracle `DBMS_METADATA` 权限和输出。
-- [x] `P1` 验证 Oracle `ALL_SOURCE` 可访问性。
-- [x] `P1` 验证 pgJDBC CopyManager 写入。
-- [x] `P1` 验证 Java 25 虚拟线程和 JDBC 连接池配合。
-- [x] `P1` 验证 Java 25 FFM `MemorySegment` 和 `Arena` 生命周期。
-- [x] `P1` 验证 FFM COPY buffer 与 heap buffer 吞吐和 GC 差异。
-- [x] `P1` 验证堆外内存预算耗尽时的限流行为。
-- [x] `P2` 验证大表分片策略。
-- [x] `P2` 验证 checksum 成本。
-
-## 28. P3：生产硬化 Backlog
-
-- [x] `P3` 增加 pgvector-backed `KnowledgeRepository` 或 Spring AI PgVectorStore adapter。
-- [x] `P3` 本地 LLM 增加健康检查、模型发现、超时指标和 fallback 计数。
-- [x] `P3` 前端显示本地 LLM endpoint 健康状态、当前模型、知识库命中率和云端 provider 开关状态。
-- [x] `P3` 生产 profile 禁止使用默认元数据库密码和默认 datasource 加密 key。
-- [x] `P3` 动态 SQL 中的 table、schema、column 标识符统一走白名单或 identifier validator。
-- [x] `P3` DML/INSERT 文件导入设计专用闭环：入口、风险、产物、门禁、失败回流和验收用例。
-- [x] `P3` 增加真实 Oracle/PostgreSQL/pgvector 环境的集成测试或 CI profile。
-- [ ] `P3` FFM 堆外内存增加硬水位，达到阈值时拒绝新 shard 分配。
-- [ ] `P3` Agent 运行增加最大 step budget，超限转人工处理。
-- [ ] `P3` 将虚拟线程执行 slot 与数据源连接池容量绑定。
-- [ ] `P3` 增加连接等待、slot 等待、执行耗时指标，用于定位连接池背压瓶颈。
-- [ ] `P3` 落地 `ORACLE_EMPTY_STRING_AS_NULL` 默认策略，并接入预检展示和 COPY 编码。
-- [ ] `P3` 数据迁移校验后生成 sequence reset 步骤。
-- [ ] `P3` 迁移计划生成 Undo Script 并支持失败后 dry-run 回滚预览。
-- [ ] `P3` Oracle 扫描采集 NLS_SORT、NLS_COMP、字符集和 collation 影响。
-- [ ] `P3` 预处理报告对重复 LOW/MEDIUM 风险做聚类折叠。
-- [ ] `P3` 大型 PL/SQL/package 使用 AST outline 和风险切片进入 AI，而不是全文提示词。
-- [ ] `P3` Agent 增加 token/cost budget，超限转人工处理。
-- [ ] `P3` MCP/Skill 调用增加 retry budget、失败归因和循环等待阻断。
-
-## 29. Definition of Done
-
-一个任务完成必须满足：
+完成定义：
 
 - 有接口或页面可验证。
 - 有失败场景处理。
 - 有必要日志。
-- 有基础测试或 fixture。
-- 有产物版本记录。
-- 有门禁验证。
-- 失败能回流为待处理问题。
-- 不泄露密码。
-- AI 提示词不包含密码、连接串、密钥。
-- embedding 内容不包含密码、连接串、密钥。
-- AI 回答能追溯知识来源。
-- AI 输出不会自动执行或自动通过审核。
-- Agent 不能绕过工具权限和审核门禁。
-- MCP tool 调用有 allowlist、超时、审计。
-- Skill 有版本、fixture、输出 schema。
+- 有测试或 fixture。
+- 有版本和来源追踪。
 - 不绕过审核门禁。
 - 不丢失原始 SQL。
+- AI 不自动执行、不自动审核、不自动覆盖 SQL。
 
-## 30. MVP 完成标准
+## 2. P0：多模块项目骨架
 
-MVP 完成时，用户应该可以：
+- [x] 创建 `backend/settings.gradle.kts`。
+- [x] 创建 `backend/build.gradle.kts` 根构建。
+- [x] 配置 Java 25 toolchain。
+- [x] 配置 Gradle Kotlin DSL multi-project。
+- [x] 创建 `backend/app` 模块。
+- [x] 创建 `backend/common` 模块。
+- [x] 创建 `backend/project` 模块。
+- [x] 创建 `backend/input` 模块。
+- [x] 创建 `backend/parser` 模块。
+- [x] 创建 `backend/model` 模块。
+- [x] 创建 `backend/dependency` 模块。
+- [x] 创建 `backend/rule` 模块。
+- [x] 创建 `backend/convert` 模块。
+- [x] 创建 `backend/risk` 模块。
+- [x] 创建 `backend/ai` 模块。
+- [x] 创建 `backend/report` 模块。
+- [x] 创建 `backend/review` 模块。
+- [x] 创建 `backend/export` 模块。
+- [x] Spring Boot plugin 只应用到 `app` 模块。
+- [x] library 模块使用 `java-library`。
+- [x] 配置模块依赖方向。
+- [x] 配置 `.\gradlew.bat projects` 可用。
+- [x] 配置 `.\gradlew.bat :app:bootRun` 可用。
+- [x] 配置 `.\gradlew.bat test` 聚合执行。
+- [x] 创建 `/api/health`。
+- [x] 配置虚拟线程。
+- [x] 配置 `spring.main.keep-alive=true`。
+- [~] 配置 PostgreSQL 元数据库连接。
+- [~] 配置 Flyway。
+- [x] Flyway 脚本先集中在 `app`。
+- [x] 创建统一 API 响应。
+- [x] 创建统一异常处理。
+- [x] 创建基础审计类型。
 
-- 创建迁移项目。
-- 输入或上传 Oracle SQL。
-- 查看识别出的对象清单。
-- 查看 Oracle SQL 到 PostgreSQL SQL 的转换结果。
-- 手工修改目标 SQL。
-- 查看风险清单。
-- 使用 AI 解释风险并生成改造建议。
-- 使用内置 Skill 生成转换结果或草稿。
-- Agent 运行过程可审计。
-- MCP tool/resource/prompt 原型可用且默认安全。
-- 生成预处理报告。
-- 提交审核并通过。
-- 导出 PostgreSQL SQL 包。
-- 修改目标 SQL 后能看到报告过期。
-- 审核通过后能看到冻结 SQL 基线。
-- 未审核或报告过期时不能导出正式 SQL 包。
+## 3. P0：前端项目骨架
 
-这才是第一版真正可用的产品闭环。
+- [x] 创建 `frontend` Vite 项目。
+- [x] 配置 React。
+- [x] 配置 TypeScript。
+- [x] 配置 Ant Design Pro 或 Ant Design + ProComponents。
+- [x] 配置 TanStack Query。
+- [x] 配置 Monaco Editor。
+- [x] 配置 React Flow。
+- [x] 配置 ECharts。
+- [x] 创建基础布局。
+- [x] 创建左侧菜单。
+- [x] 创建 API client。
+- [x] 调用 `/api/health`。
+- [x] 创建工作台首页。
 
+## 4. P0：项目和工程单元
 
+- [x] 创建 `project` 表。
+- [x] 创建 `source_project` 表。
+- [x] 创建项目状态枚举。
+- [x] 项目状态包含 `STALE`、`PAUSED`、`CANCELLED`。
+- [x] 创建工程单元类型枚举：`DATABASE_EXPORT`、`APPLICATION_SQL`、`MANUAL_BATCH`、`TARGET_POSTGRES`。
+- [x] 创建项目 API。
+- [ ] 创建工程单元 API。
+- [x] 创建项目页面。
+- [~] 创建工程单元管理页面。
+- [~] 支持同一迁移项目下多个工程单元。
+- [x] 支持默认工程单元，用于手工 SQL 和单文件。
+- [x] 所有后续对象必须带 `project_id` 和 `source_project_id`。
+
+## 5. P0：输入来源和导入批次
+
+- [x] 创建 `input_batch` 表。
+- [x] 创建 `input_source` 表。
+- [x] 创建输入来源类型枚举。
+- [x] 创建手工 SQL 输入 API。
+- [x] 创建手工 SQL 输入页面。
+- [x] 创建单文件上传 API。
+- [x] 创建多文件上传 API。
+- [x] 创建 zip 上传 API。
+- [~] 创建文件夹导入入口。
+- [x] 实现输入预检：最大单文件大小和批次总大小。
+- [x] 实现输入预检：zip bomb 检测。
+- [x] 实现输入预检：非法路径拦截。
+- [x] 实现输入预检：文件类型白名单。
+- [x] 实现输入预检：编码识别。
+- [ ] 实现输入预检：重复文件 checksum 标记。
+- [ ] 实现输入预检：空文件和明显非 SQL 文件识别。
+- [x] 保存文件相对路径。
+- [x] 保存 checksum。
+- [x] 保存文件大小。
+- [x] 保存编码检测结果。
+- [x] 保存输入批次状态。
+- [ ] 保存导入进度。
+- [ ] 支持 SSE 推送导入进度。
+- [x] 空文件返回错误。
+- [x] 非法 zip 返回错误。
+- [~] 编码失败生成输入问题。
+- [ ] 前端展示工程树。
+- [ ] 前端展示来源树。
+- [ ] 支持同一工程单元的导入批次对比。
+- [ ] 批次对比展示新增、删除、变化文件。
+- [ ] 批次对比展示新增、删除、SQL hash 变化对象。
+- [ ] 批次对比展示新增、消失、等级变化风险。
+- [ ] 批次对比影响报告和基线过期状态。
+
+## 6. P0：解析和资产模型
+
+- [x] 创建 `db_object` 表。
+- [x] 创建 `db_column` 表。
+- [x] 创建 `parse_issue` 表。
+- [x] 创建对象类型枚举。
+- [x] 创建对象状态枚举。
+- [x] 对象状态包含 `STALE`。
+- [x] 实现 SQL statement splitter。
+- [x] 实现 PL/SQL block splitter。
+- [x] 识别 `CREATE TABLE`。
+- [x] 识别 `CREATE INDEX`。
+- [x] 识别 `CREATE VIEW`。
+- [x] 识别 `CREATE SEQUENCE`。
+- [x] 识别 `CREATE TRIGGER`。
+- [x] 识别 `CREATE FUNCTION`。
+- [x] 识别 `CREATE PROCEDURE`。
+- [x] 识别 `CREATE PACKAGE`。
+- [x] 识别 `CREATE PACKAGE BODY`。
+- [x] 解析失败时保存 `ParseIssue`。
+- [x] 解析失败时保留原 SQL。
+- [x] 保存对象来源文件路径。
+- [x] 保存语句 offset 或行号。
+- [x] 保存对象归属工程。
+- [x] 多工程同名对象不误合并。
+- [x] 对象清单支持按工程过滤。
+- [ ] 对象清单支持按对象类型过滤。
+- [ ] 对象清单支持按风险等级过滤。
+
+## 7. P0：基础依赖
+
+- [x] 创建 `object_dependency` 表。
+- [x] 定义依赖类型枚举。
+- [x] 构建 view/table 基础依赖。
+- [x] 构建 trigger/table 基础依赖。
+- [x] 构建 routine/table 基础依赖。
+- [~] 构建 package routine 基础依赖。
+- [x] 标记跨工程依赖 `CROSS_SOURCE_DEPENDENCY`。
+- [x] 创建基础依赖 API。
+- [x] 前端展示基础依赖图。
+- [ ] 前端展示阻塞对象。
+- [ ] P0 不要求完整 Oracle 直连依赖图。
+
+## 8. P0：规则和风险
+
+- [ ] 创建规则定义模型。
+- [x] 创建规则命中模型。
+- [x] 创建 `risk_issue` 表。
+- [x] 定义风险等级枚举：`LOW`、`MEDIUM`、`HIGH`、`BLOCKER`。
+- [x] 检测无精度 `NUMBER`。
+- [x] 检测 `NUMBER(10,0)` / `NUMBER(19,0)` 默认收窄风险。
+- [x] 检测 Oracle `DATE` 语义差异。
+- [x] 检测空字符串和 `NULL` 语义差异。
+- [x] 检测 quoted identifier。
+- [x] 检测 `ROWNUM`。
+- [x] 检测 `CONNECT BY`。
+- [x] 检测 `DECODE`。
+- [x] 检测 `NVL`。
+- [x] 检测 `SYSDATE`。
+- [x] `SYSDATE` 风险解释必须区分事务时间、语句时间和真实当前时间。
+- [x] 检测 Oracle hint。
+- [x] 检测 dynamic SQL。
+- [x] 检测 autonomous transaction。
+- [x] 检测 package global variable。
+- [x] 风险必须引用规则命中。
+- [x] 风险必须引用对象和 SQL 片段。
+- [~] 创建规则命中解释 API。
+- [~] 规则解释包含规则编号、风险等级、原 SQL 片段、语义差异和建议改法。
+- [~] 前端提供规则命中解释页或侧边栏。
+- [ ] 创建待处理问题模型。
+- [ ] 待处理问题支持来源阶段、对象、SQL 版本、严重等级、状态、负责人。
+- [ ] 待处理问题状态包含 `WAIVED`，并记录豁免理由、范围和过期条件。
+- [ ] ParseIssue 进入待处理问题板。
+- [ ] RiskIssue 进入待处理问题板。
+- [ ] AI uncertainty 进入待处理问题板。
+- [ ] 审核意见进入待处理问题板。
+- [ ] 计算对象风险等级。
+- [ ] 计算项目兼容性评分。
+
+## 9. P0：转换引擎
+
+- [x] 创建 `conversion_result` 表。
+- [x] 定义转换等级枚举：`AUTO`、`REVIEW_REQUIRED`、`DRAFT`、`MANUAL_REQUIRED`、`UNSUPPORTED`。
+- [x] 定义 `ObjectConverter`。
+- [x] 定义 `ConversionContext`。
+- [x] 转换 `VARCHAR2`。
+- [x] 转换 `NUMBER(p,s)`。
+- [x] `NUMBER(p,0)` 默认转换为 `numeric(p,0)`，不无条件转 `integer` / `bigint`。
+- [ ] 只有值域 profile 证明安全时，才生成 `integer` / `bigint` 候选。
+- [x] 转换无精度 `NUMBER` 并标风险。
+- [x] 转换 `DATE` 并标风险。
+- [~] `SYSDATE` 只生成候选改法，不默认写死为 `CURRENT_TIMESTAMP`。
+- [ ] 实现 `ORACLE_EMPTY_STRING_AS_NULL` 默认策略和报告展示。
+- [x] 转换 `CLOB`。
+- [x] 转换 `BLOB`。
+- [x] 转换 primary key。
+- [x] 转换 unique constraint。
+- [x] 转换 check constraint。
+- [x] 转换普通 index。
+- [x] 转换 sequence。
+- [x] 转换简单 view。
+- [x] trigger 生成草稿或风险。
+- [x] function/procedure 生成草稿或风险。
+- [ ] package 生成拆解建议。
+- [x] 转换结果引用源对象和规则命中。
+
+## 10. P0：SQL 版本链和转换工作台
+
+- [x] 创建 `sql_version` 表。
+- [x] 创建 SQL 基线状态枚举。
+- [x] 创建转换工作台 API。
+- [x] 创建转换工作台页面。
+- [x] 集成 Monaco 左右编辑器。
+- [x] 展示 Oracle 原 SQL。
+- [x] 展示 PostgreSQL 目标 SQL。
+- [ ] 展示 SQL diff。
+- [x] 展示转换等级。
+- [x] 展示风险问题。
+- [x] 展示规则命中。
+- [x] 支持用户编辑目标 SQL。
+- [x] 保存用户编辑版本。
+- [ ] 实现 PostgreSQL 语法预检。
+- [ ] 语法预检检查 Oracle 语法残留。
+- [ ] 语法预检检查 identifier 非法字符。
+- [ ] 语法预检检查明显依赖缺失。
+- [ ] 语法预检问题进入风险和待处理问题板。
+- [ ] 支持恢复自动生成版本。
+- [ ] 修改目标 SQL 后标记旧报告过期。
+- [ ] 修改目标 SQL 后标记旧基线过期。
+- [ ] 审核通过后冻结 SQL 基线。
+
+## 11. P0：AI 迁移智能层
+
+- [x] 创建 `ai_suggestion` 表。
+- [x] 创建 `ai_call_log` 表。
+- [x] 定义 `AiProvider`。
+- [x] 实现 `MockAiProvider`。
+- [x] 定义 `AiContextBuilder`。
+- [x] AI 上下文注入对象模型。
+- [x] AI 上下文注入基础依赖。
+- [x] AI 上下文注入规则命中。
+- [x] AI 上下文注入风险问题。
+- [x] AI 上下文注入转换结果。
+- [ ] AI 上下文注入人工编辑 diff。
+- [x] 实现风险解释。
+- [x] 实现 SQL 改造建议。
+- [x] 实现验证建议。
+- [x] 实现报告摘要建议。
+- [x] AI 输出包含 `ruleHits`。
+- [x] AI 输出包含 `affectedObjects`。
+- [x] AI 输出包含 `changePlan`。
+- [x] AI 输出包含 `validationPlan`。
+- [x] AI 输出包含 `uncertainties`。
+- [x] 保存 AI 建议。
+- [ ] 支持接受 AI 建议。
+- [ ] 支持忽略 AI 建议。
+- [ ] 支持编辑后应用 AI 建议。
+- [ ] AI 建议应用写审计日志。
+- [x] 禁止 AI 自动覆盖 SQL 基线。
+- [x] 禁止 AI 自动审核。
+- [x] 禁止 AI 自动执行 SQL。
+
+## 12. P0：阶段报告和预处理报告
+
+- [x] 创建 `stage_report` 表。
+- [x] 创建 `precheck_report` 表。
+- [x] 定义报告状态枚举。
+- [x] 定义阶段报告类型：`SOURCE_SCAN`、`ASSET_MODEL`、`CONVERSION`、`PRECHECK`、`REVIEW`。
+- [ ] Source Scan Report 导出。
+- [ ] Asset Model Report 导出。
+- [ ] Conversion Report 导出。
+- [x] Precheck Report 导出。
+- [ ] Review Report 导出。
+- [x] 报告支持 HTML。
+- [x] 报告支持 JSON。
+- [ ] 报告支持按工程单元导出。
+- [x] 报告支持全项目汇总导出。
+- [~] 报告引用输入源版本。
+- [~] 报告引用对象版本。
+- [~] 报告引用转换结果版本。
+- [~] 报告引用风险版本。
+- [ ] 报告引用 AI 建议版本。
+- [ ] 支持报告差异。
+- [ ] 报告差异展示新增、删除、变化对象。
+- [ ] 报告差异展示新增、消失、等级变化风险。
+- [ ] 报告差异展示 SQL 基线变化。
+- [ ] BLOCKER 或 SQL 基线变化时旧审核结论失效或要求重新确认。
+- [ ] 对象变更后报告过期。
+- [ ] 规则变更后报告过期。
+- [ ] 目标 SQL 变更后报告过期。
+- [ ] 上游变更后相关 AI 建议、Migration Plan 和 SQL 包状态标记 `STALE`。
+- [x] 前端报告页。
+
+## 13. P0：审核门禁
+
+- [x] 创建 `review_record` 表。
+- [x] 创建审核状态。
+- [x] 提交报告审核。
+- [x] 审核通过。
+- [x] 有条件通过。
+- [x] 驳回。
+- [x] 请求修改。
+- [x] 保存审核意见。
+- [x] 保存审核人。
+- [x] 保存审核时间。
+- [x] 审核记录绑定报告版本。
+- [~] 审核记录绑定 SQL 版本。
+- [ ] 未审核不能导出正式 SQL 包。
+- [ ] 报告过期不能导出正式 SQL 包。
+- [ ] SQL 基线过期不能导出正式 SQL 包。
+- [x] 审核通过后冻结 SQL 基线。
+- [x] P0 支持单用户/开发模式审核。
+- [ ] P1 预留角色审核和豁免权限。
+- [x] 前端审核页面。
+
+## 14. P0：SQL 包导出
+
+- [x] 创建 SQL 包导出 API。
+- [x] 创建 SQL 包预览 API。
+- [x] SQL 包预览展示导出文件结构。
+- [~] SQL 包预览展示对象数量和对象类型分布。
+- [x] SQL 包预览展示 SQL 执行顺序。
+- [~] SQL 包预览展示未处理风险和豁免风险摘要。
+- [~] SQL 包预览展示 SQL 基线版本、报告版本和审核记录。
+- [ ] 按对象类型排序 SQL。
+- [x] 只导出审核冻结后的 SQL 基线。
+- [x] 支持单个 `.sql` 导出。
+- [ ] 支持 zip 导出。
+- [ ] 导出前检查报告状态。
+- [x] 导出前检查审核状态。
+- [x] 导出前检查基线状态。
+- [ ] 导出动作写审计日志。
+- [x] 前端导出入口。
+
+## 15. P0：MVP 边界检查
+
+- [x] P0 不创建外部化 AgentRuntime。
+- [x] P0 不创建 Skill 插件体系。
+- [x] P0 不开放 MCP Server / Client。
+- [x] P0 AI 只通过 `AiContextBuilder`、`AiProvider`、结构化建议和审计日志进入闭环。
+- [x] P0 不引入 Spring Batch，任务状态先用轻量任务表和状态机。
+- [x] P0 不启用 FFM 作为硬依赖。
+
+## 16. P0：端到端回归
+
+- [ ] 准备 `CREATE TABLE users` 手工 SQL fixture。
+- [ ] 准备 table/index/sequence/view fixture。
+- [ ] 准备 trigger/function/procedure/package 风险 fixture。
+- [ ] 准备多文件输入 fixture。
+- [ ] 准备 zip 输入 fixture。
+- [ ] 验证手工 SQL 到 SQL 包闭环。
+- [ ] 验证单文件到 SQL 包闭环。
+- [ ] 验证 zip 到 SQL 包闭环。
+- [ ] 验证解析失败不丢原文。
+- [ ] 验证 AI 建议不能自动覆盖 SQL。
+- [ ] 验证未审核不能导出。
+- [ ] 验证报告过期不能导出。
+- [ ] 验证修改目标 SQL 后报告过期。
+- [ ] 验证审核通过后冻结 SQL 基线。
+- [ ] 验证关键动作都有审计日志。
+
+## 17. P1：Oracle 直连和结构执行
+
+- [ ] 创建 `datasource` 模块。
+- [ ] 创建 `metadata` 模块。
+- [ ] 创建 `planner` 模块。
+- [ ] 创建 `executor` 模块。
+- [ ] 创建 `validator` 模块。
+- [ ] Oracle 数据源管理。
+- [ ] PostgreSQL 数据源管理。
+- [ ] 数据源密码加密。
+- [ ] Oracle 连接测试。
+- [ ] PostgreSQL 连接测试。
+- [ ] Oracle schema 扫描。
+- [ ] table / column / constraint / index / sequence / view / trigger / routine / package 扫描。
+- [ ] `DBMS_METADATA` DDL 采集。
+- [ ] PL/SQL source 采集。
+- [ ] `ALL_DEPENDENCIES` 或等价依赖采集。
+- [ ] row count、segment size、统计信息摘要采集。
+- [ ] Oracle 版本、字符集、NLS 参数采集。
+- [ ] Oracle 扫描结果接入统一资产模型。
+- [ ] 迁移计划生成。
+- [ ] 迁移计划包含 `DRY_RUN_DDL`。
+- [ ] 迁移计划包含 `DRY_RUN_UNDO`。
+- [ ] 迁移计划包含 `REPLAY_GRANT`。
+- [ ] 迁移计划包含 `ANALYZE_TARGET` 步骤定义。
+- [ ] `SECURITY DEFINER` routine 标记高风险并检查 `search_path`。
+- [ ] owner / role / grant 映射缺失时生成 work item。
+- [ ] Migration Plan Report 导出。
+- [ ] PostgreSQL DDL 执行。
+- [ ] DDL Execution Report 导出。
+- [ ] DDL 失败回流 work item。
+
+## 18. P2：数据迁移和复杂对象增强
+
+- [ ] 实现 Oracle streaming reader。
+- [ ] 实现 PostgreSQL COPY writer。
+- [ ] 实现 bounded heap / direct COPY buffer。
+- [ ] 生成 `snapshot_scn`。
+- [ ] 生成 `DataSnapshotManifest`。
+- [ ] Oracle 读取支持 `AS OF SCN`。
+- [ ] 无法使用一致性快照时标记非生产或高风险。
+- [ ] 实现 Java 25 FFM COPY buffer 特性开关。
+- [ ] 实现 MemoryBudgetManager。
+- [ ] 小表全量迁移。
+- [ ] 大表分片迁移。
+- [ ] checkpoint。
+- [ ] 断点续传。
+- [ ] shard 重试。
+- [ ] 行数校验。
+- [ ] 抽样校验。
+- [ ] checksum 校验。
+- [ ] 校验报告区分 `DEMO_ONLY`、`STRUCTURE_READY`、`DATA_READY`、`CUTOVER_READY`、`BLOCKED`。
+- [ ] Sequence Reset。
+- [ ] Grant replay。
+- [ ] post-load ANALYZE。
+- [ ] Validation Report 导出。
+- [ ] package spec 分析。
+- [ ] package body 分析。
+- [ ] package routine 拆解。
+- [ ] trigger 转换增强。
+- [ ] function/procedure 转换增强。
+- [ ] 对象簇识别。
+- [ ] 风险地图。
+- [ ] 迁移波次建议。
+
+## 19. P3：生产硬化
+
+- [ ] 虚拟线程 execution slot 与连接池容量绑定。
+- [ ] 连接等待指标。
+- [ ] slot 等待指标。
+- [ ] FFM 堆外内存 hard watermark。
+- [ ] Arena 泄漏检测。
+- [ ] Undo Script。
+- [ ] dry-run rollback preview。
+- [ ] NLS/collation 深化。
+- [ ] 报告风险聚类折叠。
+- [ ] 大型 PL/SQL AST outline。
+- [ ] AI token/cost budget。
+- [ ] Agent max step budget。
+- [ ] MCP/Skill retry budget。
+- [ ] MCP 远程只支持 Streamable HTTP。
+- [ ] MCP 远程入口校验 Origin。
+- [ ] MCP 长任务支持状态、TTL、取消和结果获取。
+- [ ] Spring Batch 引入前完成 ADR。
+
+## 20. 明确不做的 MVP 项
+
+- [ ] 不创建独立外部参考增强模块。
+- [ ] 不做 AI 自动执行。
+- [ ] 不做 AI 自动审核。
+- [ ] 不做完整 package 自动转换。
+- [ ] 不做分布式 worker。
+- [ ] 不做 CDC。
+- [ ] 不做外部化 Agent/MCP/Skills。
